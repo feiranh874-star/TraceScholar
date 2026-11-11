@@ -1,0 +1,41 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JavaScript / frontend
+node_modules/
+dist/
+.vite/
+
+# Runtime data and generated artifacts
+data/*
+!data/.gitkeep
+storage/
+uploads/
+indexes/
+logs/
+*.sqlite3
+*.db
+
+# IDE and operating system files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Local PDF and exported reports
+*.pdf
+*.docx
+*.zip

@@ -1,0 +1,1 @@
+"""TraceScholar backend application package."""
