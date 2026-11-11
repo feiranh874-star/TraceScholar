@@ -77,6 +77,26 @@
     return paper.author?.trim() || "未填写作者";
   }
 
+  function paperVersion(paper) {
+    if (paper.version_label) return paper.version_label;
+    return paper.arxiv_id ? "版本未知" : "";
+  }
+
+  function versionRelationNotice(paper) {
+    const relation = paper.version_relation;
+    if (!relation || relation.kind === "none") return "";
+    if (relation.kind === "older_version") {
+      return `已识别为同一论文的较早版本；论文库中已有更新的 ${relation.latest_version_label || "版本"}，建议保留新版用于阅读，同时保留本版用于差异比较。`;
+    }
+    if (relation.kind === "newer_version") {
+      return "已识别为同一论文的更新版本，建议优先使用当前版本。";
+    }
+    if (relation.kind === "same_version") {
+      return "论文库中已有同一版本的其他文件，可能是文本版与扫描版。";
+    }
+    return "已在论文库中发现同一研究工作的关联记录。";
+  }
+
   function statusInfo(status) {
     if (status === "ready") {
       return { label: "解析完成", className: "status-ready" };
@@ -230,12 +250,13 @@
 
   function paperListItem(paper) {
     const status = statusInfo(paper.parse_status);
+    const version = paperVersion(paper);
     return `
       <button class="paper-list-item" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
         <span class="paper-type-icon" aria-hidden="true">PDF</span>
         <span class="paper-list-copy">
           <strong class="paper-list-title">${escapeHtml(paperTitle(paper))}</strong>
-          <span class="paper-list-meta">${escapeHtml(paperAuthor(paper))} · ${paper.page_count} 页 · ${formatDate(paper.created_at)}</span>
+          <span class="paper-list-meta">${escapeHtml(paperAuthor(paper))}${version ? ` · ${escapeHtml(version)}` : ""} · ${paper.page_count} 页 · ${formatDate(paper.created_at)}</span>
         </span>
         <span class="status-badge ${status.className}">${status.label}</span>
         <span class="paper-list-arrow" aria-hidden="true">→</span>
@@ -294,7 +315,7 @@
             <td>
               <button class="table-paper" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
                 <span class="table-paper-icon" aria-hidden="true">PDF</span>
-                <span><strong class="table-paper-title">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file">${escapeHtml(paper.filename)}</small></span>
+                <span><strong class="table-paper-title">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small></span>
               </button>
             </td>
             <td>${escapeHtml(paperAuthor(paper))}</td>
@@ -361,6 +382,9 @@
       ["作者", paperAuthor(paper)],
       ["原始文件", paper.filename],
       ["页数", `${paper.page_count} 页`],
+      ["arXiv", paper.arxiv_id || "未识别"],
+      ["版本", paperVersion(paper) || "未识别"],
+      ["章节 / 文本块", `${paper.section_count || 0} / ${paper.chunk_count || 0}`],
       ["解析状态", status.label],
       ["导入时间", formatDate(paper.created_at, true)],
       ["文件指纹", paper.sha256 ? paper.sha256.slice(0, 12) + "…" : "未生成"],
@@ -369,10 +393,12 @@
       .map(([label, value]) => `<div class="metadata-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
       .join("");
 
-    const warnings = Array.isArray(paper.warnings) ? paper.warnings : [];
+    const warnings = Array.isArray(paper.warnings) ? paper.warnings.map(localizeWarning) : [];
+    const relationNotice = versionRelationNotice(paper);
+    if (relationNotice) warnings.unshift(relationNotice);
     if (warnings.length) {
       elements.drawerWarning.classList.remove("is-hidden");
-      elements.drawerWarning.innerHTML = `<strong>解析提示</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(localizeWarning(warning))}</li>`).join("")}</ul>`;
+      elements.drawerWarning.innerHTML = `<strong>解析与版本提示</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`;
     } else {
       elements.drawerWarning.classList.add("is-hidden");
       elements.drawerWarning.innerHTML = "";
@@ -502,7 +528,10 @@
     }
 
     const status = statusInfo(paper.parse_status);
-    const duplicateText = paper.duplicate ? "这篇论文已经在资料库中，本次未重复保存。" : "论文已保存，并完成逐页文本提取。";
+    const relationNotice = versionRelationNotice(paper);
+    const duplicateText = paper.duplicate
+      ? "这篇论文已经在资料库中，本次未重复保存。"
+      : relationNotice || "论文已保存，并完成逐页文本提取。";
     elements.uploadResult.innerHTML = `
       <div class="result-card result-success">
         <span class="result-icon" aria-hidden="true">✓</span>
@@ -510,7 +539,7 @@
           <span class="section-kicker">${paper.duplicate ? "已识别重复文件" : "导入成功"}</span>
           <h3>${escapeHtml(paperTitle(paper))}</h3>
           <p>${duplicateText}</p>
-          <div class="result-meta"><span>${paper.page_count} 页</span><span class="status-badge ${status.className}">${status.label}</span></div>
+          <div class="result-meta"><span>${paper.page_count} 页</span>${paperVersion(paper) ? `<span>${escapeHtml(paperVersion(paper))}</span>` : ""}<span class="status-badge ${status.className}">${status.label}</span></div>
           <div class="result-actions"><button class="primary-button" type="button" data-result-open="${escapeHtml(paper.paper_id)}">查看原文</button><button class="secondary-button" type="button" data-result-library>返回论文库</button><button class="text-button" type="button" data-upload-again>继续导入</button></div>
         </div>
       </div>

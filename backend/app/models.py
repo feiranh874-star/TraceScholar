@@ -1,0 +1,88 @@
+"""Persistent document records and evidence-oriented API contracts."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class SourceIdentifiers(BaseModel):
+    arxiv_id: str | None = None
+    doi: str | None = None
+
+
+class PageRecord(BaseModel):
+    page: int = Field(ge=1)
+    text: str
+    char_count: int = Field(ge=0)
+    needs_ocr: bool
+    bbox: tuple[float, float, float, float] | None = None
+
+
+class SectionRecord(BaseModel):
+    section_id: str
+    number: str | None = None
+    title: str
+    level: int = Field(ge=1)
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
+    page_char_start: int = Field(ge=0)
+
+
+class SourceReference(BaseModel):
+    paper_id: str
+    work_id: str
+    version_label: str | None = None
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
+    section_id: str | None = None
+    bbox: tuple[float, float, float, float] | None = None
+
+
+class TextChunkRecord(BaseModel):
+    chunk_id: str
+    text: str
+    char_count: int = Field(ge=1)
+    char_start: int = Field(ge=0)
+    char_end: int = Field(ge=1)
+    source: SourceReference
+
+
+class EvidenceRecord(BaseModel):
+    """Retrieval result contract used by later RAG and answer stages."""
+
+    evidence_id: str
+    text: str
+    score: float | None = None
+    source: SourceReference
+
+
+class PaperMetadataRecord(BaseModel):
+    paper_id: str
+    work_id: str
+    filename: str
+    sha256: str
+    page_count: int = Field(ge=1)
+    title: str | None = None
+    author: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    abstract: str | None = None
+    identifiers: SourceIdentifiers = Field(default_factory=SourceIdentifiers)
+    version_label: str | None = None
+    version_number: int | None = Field(default=None, ge=1)
+    parse_status: Literal["ready", "needs_ocr"]
+    needs_ocr_pages: list[int] = Field(default_factory=list)
+    section_count: int = Field(default=0, ge=0)
+    chunk_count: int = Field(default=0, ge=0)
+    created_at: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class VersionRelation(BaseModel):
+    kind: Literal["none", "related", "older_version", "newer_version", "same_version"]
+    related_count: int = Field(ge=0)
+    latest_paper_id: str
+    latest_version_label: str | None = None
+    recommendation: Literal["none", "keep_existing_newer", "keep_uploaded_newer", "keep_both"]
+

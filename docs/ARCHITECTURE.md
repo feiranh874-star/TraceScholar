@@ -28,6 +28,18 @@
 
 `page` 从 1 开始；`bbox` 没有可靠坐标时必须为 `null`，不能伪造定位。
 
+当前落盘结构为：
+
+```text
+data/papers/{paper_id}/
+  metadata.json       # 论文版本、work_id、arXiv/DOI、题名与解析状态
+  source.pdf          # 原始文件
+  pages/*.json        # 从 1 开始的逐页文本
+  structure.json      # 章节、文本块与证据来源指针
+```
+
+`paper_id` 表示一个已上传的具体文件/版本，`work_id` 表示跨版本的同一研究工作。arXiv 版本使用不含 `vN` 的 arXiv ID 生成稳定 `work_id`。
+
 ## 关键边界
 
 1. 论文原文件和解析产物分开保存。

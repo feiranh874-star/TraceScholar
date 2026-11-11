@@ -29,7 +29,8 @@ tests/         自动化测试与人工验收记录
 - [x] 后端健康检查
 - [x] PDF 上传、分页文本抽取与论文详情查询
 - [x] 中文科研工作台、论文库、拖放导入与分页阅读
-- [ ] 论文版本识别
+- [x] arXiv 论文族与版本识别，章节/文本块/证据来源数据契约
+- [ ] 论文版本差异分析
 - [ ] 带页码证据的问答
 - [ ] 多论文比较和最小 Agent
 
@@ -60,3 +61,4 @@ uvicorn app.main:app --reload --port 8000
 - 毕设平台只复用通用工程能力，不直接复制业务页面和数据库。
 
 详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+组委会样例回归结果见 [docs/OFFICIAL_ACCEPTANCE.md](docs/OFFICIAL_ACCEPTANCE.md)。

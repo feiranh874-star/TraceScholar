@@ -66,6 +66,59 @@ def test_duplicate_pdf_returns_existing_record(client):
     assert len(client.get("/api/papers").json()["items"]) == 1
 
 
+def test_arxiv_versions_share_work_and_report_newer_existing_version(client):
+    version_7 = make_pdf("A newer version with enough readable content for extraction.")
+    version_1 = make_pdf("An older version with different readable content for extraction.")
+
+    latest = client.post(
+        "/api/papers",
+        files={"file": ("1706.03762v7.pdf", version_7, "application/pdf")},
+    ).json()
+    older = client.post(
+        "/api/papers",
+        files={"file": ("1706.03762v1.pdf", version_1, "application/pdf")},
+    ).json()
+
+    assert latest["arxiv_id"] == "1706.03762"
+    assert latest["version_label"] == "v7"
+    assert older["version_label"] == "v1"
+    assert older["work_id"] == latest["work_id"]
+    assert older["version_relation"] == {
+        "kind": "older_version",
+        "related_count": 1,
+        "latest_paper_id": latest["paper_id"],
+        "latest_version_label": "v7",
+        "recommendation": "keep_existing_newer",
+    }
+    assert client.get("/api/papers").json()["total"] == 2
+
+
+def test_structure_and_chunks_preserve_evidence_source(client):
+    payload = make_pdf(
+        "Abstract\nThis abstract contains enough text to be indexed.\n"
+        "1\nIntroduction\nThis introduction explains the tested document structure in detail."
+    )
+    paper = client.post(
+        "/api/papers",
+        files={"file": ("2401.12345v2.pdf", payload, "application/pdf")},
+    ).json()
+
+    structure = client.get(f"/api/papers/{paper['paper_id']}/structure").json()
+    chunks = client.get(f"/api/papers/{paper['paper_id']}/chunks").json()
+
+    assert structure["section_count"] >= 2
+    assert {section["title"] for section in structure["sections"]} >= {"Abstract", "Introduction"}
+    assert chunks["total"] >= 2
+    section_titles = {section["section_id"]: section["title"] for section in structure["sections"]}
+    chunk_sections = {section_titles[item["source"]["section_id"]] for item in chunks["items"]}
+    assert chunk_sections >= {"Abstract", "Introduction"}
+    source = chunks["items"][0]["source"]
+    assert source["paper_id"] == paper["paper_id"]
+    assert source["work_id"] == paper["work_id"]
+    assert source["version_label"] == "v2"
+    assert source["page_start"] == 1
+
+
 def test_non_pdf_and_corrupt_pdf_are_rejected_without_persisting(client):
     non_pdf = client.post("/api/papers", files={"file": ("notes.pdf", b"not a pdf", "application/pdf")})
     corrupt_pdf = client.post("/api/papers", files={"file": ("broken.pdf", b"%PDF-1.4 broken", "application/pdf")})
