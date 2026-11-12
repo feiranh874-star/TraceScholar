@@ -27,6 +27,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _configured_data_dir = Path(os.getenv("STORAGE_DIR", "data"))
 DATA_DIR = _configured_data_dir if _configured_data_dir.is_absolute() else PROJECT_ROOT / _configured_data_dir
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_STORAGE_BYTES = int(os.getenv("MAX_STORAGE_BYTES", str(512 * 1024 * 1024)))
+if MAX_STORAGE_BYTES < 1:
+    raise ValueError("MAX_STORAGE_BYTES must be positive")
 MAX_PDF_PAGES = 2000
 MAX_EXTRACTED_CHARS = 20_000_000
 MIN_PAGE_TEXT_CHARS = 40
@@ -76,6 +79,15 @@ def _all_metadata() -> list[dict[str, Any]]:
         if metadata:
             papers.append(metadata)
     return papers
+
+
+def _storage_usage_bytes() -> int:
+    total = 0
+    for paper_dir in _papers_dir().iterdir():
+        if not paper_dir.is_dir() or paper_dir.name.startswith(".") or paper_dir.is_symlink():
+            continue
+        total += sum(path.stat().st_size for path in paper_dir.rglob("*") if path.is_file() and not path.is_symlink())
+    return total
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -294,6 +306,9 @@ def upload_paper(file: UploadFile = File(...)) -> dict[str, Any]:
             _write_json(staging_dir / "structure.json", {"sections": sections, "chunks": chunks})
             _write_json(staging_dir / "metadata.json", metadata)
             os.replace(temp_pdf, staging_dir / "source.pdf")
+            staged_bytes = sum(path.stat().st_size for path in staging_dir.rglob("*") if path.is_file())
+            if _storage_usage_bytes() + staged_bytes > MAX_STORAGE_BYTES:
+                raise HTTPException(status_code=507, detail="Paper storage quota reached")
             destination = papers_dir / str(paper_id)
             os.replace(staging_dir, destination)
             return _public_paper(metadata)

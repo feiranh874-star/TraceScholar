@@ -1,0 +1,15 @@
+# Allowlist: no secrets, PDFs, local data, virtualenvs, or Git metadata.
+**
+!Dockerfile
+!backend/
+!backend/requirements.txt
+!backend/requirements-production.txt
+!backend/app/
+!backend/app/*.py
+!backend/app/**/*.py
+!frontend/
+!frontend/index.html
+!frontend/assets/
+!frontend/assets/*.css
+!frontend/assets/*.js
+!frontend/assets/*.svg

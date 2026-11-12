@@ -1,0 +1,9 @@
+# Core versions match the local regression-tested environment.
+# Re-run the complete tests before upgrading these packages.
+-r requirements.txt
+fastapi==0.162.4
+starlette==1.7.0
+pydantic==2.14.3
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+PyMuPDF==1.28.2

@@ -149,6 +149,15 @@ def test_empty_text_page_is_marked_for_ocr(client):
     assert client.get(f"/api/papers/{paper['paper_id']}/pages/1").json()["text"] == ""
 
 
+def test_storage_quota_rejects_upload_and_cleans_staging(client, monkeypatch):
+    monkeypatch.setattr(papers, "MAX_STORAGE_BYTES", 1)
+    payload = make_pdf("A sufficiently long page for the storage quota regression test.")
+    response = client.post("/api/papers", files={"file": ("paper.pdf", payload, "application/pdf")})
+    assert response.status_code == 507
+    assert client.get("/api/papers").json()["total"] == 0
+    assert not list((papers.DATA_DIR / "papers").glob(".upload-*"))
+
+
 def test_filename_cannot_control_storage_path(client):
     payload = make_pdf("A valid page containing enough text for the upload parser.")
     response = client.post("/api/papers", files={"file": ("../../outside.pdf", payload, "application/pdf")})

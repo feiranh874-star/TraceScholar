@@ -52,6 +52,13 @@ uvicorn app.main:app --reload --port 8000
 
 复制 `.env.example` 为 `.env`，再填写自己的模型配置。`.env` 不得提交到 GitHub。
 
+## 公网演示
+
+已提供 Dockerfile、Compose、演示账号保护、上传限流和存储配额。
+生产模式必须设置 APP_ENV=production 和至少 16 字符的 DEMO_PASSWORD；默认关闭接口文档。
+部署步骤与持久磁盘配置见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+演示账号共享论文库，不应上传私密资料；本地开发默认保持不要求登录。
+
 ## 开发规则
 
 - 先保证官方测试 PDF 的主流程能运行，再扩展可选功能。

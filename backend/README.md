@@ -16,7 +16,9 @@ uvicorn app.main:app --reload --port 8000
 
 论文列表、元数据和单页文本分别见 `GET /api/papers`、`GET /api/papers/{paper_id}`、`GET /api/papers/{paper_id}/pages/{page_number}`。章节结构与可分页文本块分别见 `GET /api/papers/{paper_id}/structure` 和 `GET /api/papers/{paper_id}/chunks`；每个文本块保留论文、版本、页码、章节与坐标来源字段。
 
-当前上传大小限制在 multipart 解包后执行。公网部署时还需在反向代理或网关设置请求体上限，避免超大请求占用解析阶段的临时磁盘。
+单文件 50 MiB 限制在 multipart 解包后执行；现在另外增加 ASGI 层请求体上限，默认 52 MiB，并校验流式请求。生产环境还有账号保护、上传限流、并发限制和 512 MiB 资料库配额。网关仍应设置相应请求体上限、连接超时和用量告警。
+
+Docker 部署与公网验收见 [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)。本地启动默认不加载仓库根目录的 .env；如需加载，可在原 uvicorn 命令加上 --env-file ../.env。Compose 会注入根目录的 .env，云端需在平台配置环境变量。
 
 运行测试：
 

@@ -1,0 +1,23 @@
+services:
+  tracescholar:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: production
+      ENABLE_API_DOCS: "false"
+      STORAGE_DIR: /app/data
+      PORT: "8000"
+    volumes:
+      - paper-data:/app/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  paper-data:

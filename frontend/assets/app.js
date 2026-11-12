@@ -4,7 +4,7 @@
   const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
   const viewLabels = {
     overview: { eyebrow: "研究资料总览", title: "科研工作台" },
-    library: { eyebrow: "本地可信知识库", title: "论文库" },
+    library: { eyebrow: "可信科研知识库", title: "论文库" },
     import: { eyebrow: "PDF 解析入库", title: "导入资料" },
   };
 
@@ -128,21 +128,24 @@
 
   function localizeApiError(detail, status) {
     const value = String(detail || "");
+    if (status === 401) return "登录已失效，请刷新页面并输入演示账号和密码。";
+    if (status === 429) return "上传过于频繁或服务繁忙，请一分钟后重试。";
+    if (status === 507) return "演示资料库已达到容量上限，请联系管理员清理或扩容。";
     if (/not a PDF/i.test(value)) return "所选文件不是有效的 PDF。";
     if (/damaged or unreadable/i.test(value)) return "PDF 已损坏或无法读取。";
     if (/Password-protected/i.test(value)) return "暂不支持加密或需要密码的 PDF。";
     if (/50 MiB/i.test(value)) return "文件超过 50 MiB 上传限制。";
     if (/page limit/i.test(value)) return "PDF 页数超过系统限制。";
     if (/too much extracted text/i.test(value)) return "PDF 提取出的文本量超过系统限制。";
-    if (/Could not store/i.test(value)) return "文件保存失败，请检查本地存储后重试。";
+    if (/Could not store/i.test(value)) return "文件保存失败，请联系管理员检查服务存储。";
     if (status === 413) return "文件超过系统允许的处理范围。";
-    if (status >= 500) return "本地服务处理失败，请稍后重试。";
+    if (status >= 500) return "服务处理失败，请稍后重试。";
     return value || "请求失败，请稍后重试。";
   }
 
   function friendlyError(error, fallback) {
     if (error instanceof TypeError || /failed to fetch|networkerror|network request failed/i.test(String(error?.message))) {
-      return "无法连接本地服务，请确认后端已经启动。";
+      return "无法连接服务，请检查网络或联系管理员。";
     }
     return error?.message || fallback;
   }
@@ -166,11 +169,11 @@
   }
 
   async function checkHealth() {
-    setApiState("is-checking", "正在连接", "本地服务");
+    setApiState("is-checking", "正在连接", "科研资料服务");
     try {
       const response = await fetch("/health", { headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error("health check failed");
-      setApiState("is-online", "服务已连接", "数据仅存本机");
+      setApiState("is-online", "服务已连接", "演示账号共享资料库");
     } catch (_error) {
       setApiState("is-offline", "服务未连接", "请启动后端服务");
     }
@@ -338,7 +341,7 @@
   function setLibraryLoading() {
     elements.libraryEmpty.classList.add("is-hidden");
     elements.libraryTable.closest(".table-wrap").classList.remove("is-hidden");
-    elements.libraryTable.innerHTML = '<tr class="loading-row"><td colspan="6"><span></span>正在读取本地论文库…</td></tr>';
+    elements.libraryTable.innerHTML = '<tr class="loading-row"><td colspan="6"><span></span>正在读取论文库…</td></tr>';
     elements.recentPapers.innerHTML = '<div class="inline-empty is-loading"><span>正在加载论文资料…</span></div>';
   }
 
@@ -358,11 +361,11 @@
       state.papers = [];
       state.total = 0;
       renderAll();
-      elements.recentPapers.innerHTML = '<div class="inline-empty is-error"><strong>论文库读取失败</strong><span>请确认本地服务已经启动。</span></div>';
+      elements.recentPapers.innerHTML = '<div class="inline-empty is-error"><strong>论文库读取失败</strong><span>请检查网络和服务状态。</span></div>';
       elements.libraryTable.closest(".table-wrap").classList.add("is-hidden");
       elements.libraryEmpty.classList.remove("is-hidden");
       elements.libraryEmpty.querySelector("h3").textContent = "无法读取论文库";
-      elements.libraryEmpty.querySelector("p").textContent = "请确认本地服务已经启动，然后重新加载。";
+      elements.libraryEmpty.querySelector("p").textContent = "请检查网络和服务状态，然后重新加载。";
       const retryButton = elements.libraryEmpty.querySelector("button");
       retryButton.textContent = "重新加载";
       retryButton.dataset.retryLoad = "true";
