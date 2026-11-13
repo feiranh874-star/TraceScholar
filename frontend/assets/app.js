@@ -372,6 +372,30 @@
     elements.answerModel.textContent = "";
   }
 
+  function answerTextForDisplay(value) {
+    const displayFormulaMarker = "\uE000DISPLAY_FORMULA\uE001";
+    const inlineFormulaMarker = "\uE000INLINE_FORMULA\uE001";
+    const inlineMathLabel = /[\u3400-\u9fff]/.test(String(value || "")) ? "相关量" : "the relevant quantity";
+    return String(value || "")
+      .replace(/```(?:latex|math|tex)\s*[\s\S]*?```/gi, displayFormulaMarker)
+      .replace(/\\begin\{(?:equation\*?|align\*?|gather\*?|multline\*?|aligned|cases|split|array|[bpv]?matrix)\}[\s\S]*?\\end\{(?:equation\*?|align\*?|gather\*?|multline\*?|aligned|cases|split|array|[bpv]?matrix)\}/gi, displayFormulaMarker)
+      .replace(/\\\[[\s\S]*?\\\]/g, displayFormulaMarker)
+      .replace(/\$\$[\s\S]*?\$\$/g, displayFormulaMarker)
+      .replace(/\\\([\s\S]*?\\\)/g, inlineFormulaMarker)
+      .replace(/\$(?!\$)[^$\n]+\$/g, inlineFormulaMarker)
+      .replace(new RegExp(`(?:公式|表达式)(?:如下|为|是)?\\s*[：:]?\\s*${displayFormulaMarker}`, "g"), " ")
+      .replace(new RegExp(`(?:可)?(?:写作|表示为|记为)\\s*[：:]?\\s*${displayFormulaMarker}`, "g"), " ")
+      .replace(new RegExp(`(?:the\\s+)?(?:formula|equation|expression)(?:\\s+(?:is|equals|can\\s+be\\s+written\\s+as))?\\s*[:=：]?\\s*${displayFormulaMarker}`, "gi"), " ")
+      .replaceAll(displayFormulaMarker, " ")
+      .replaceAll(inlineFormulaMarker, inlineMathLabel)
+      .replace(/[ \t]+([，。；：,.!?])/g, "$1")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, "$1")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   function renderAnswer(payload) {
     elements.answerPanel.classList.remove("is-hidden");
     elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "证据约束回答";
@@ -380,7 +404,10 @@
       elements.answerCitations.innerHTML = "";
       return;
     }
-    elements.answerResult.innerHTML = `<p>${escapeHtml(payload.answer).replaceAll("\n", "<br>")}</p>`;
+    const formattedAnswer = answerTextForDisplay(payload.answer);
+    const hasReadableAnswer = formattedAnswer.replace(/\[E\d+\]/gi, "").replace(/[\s\p{P}\p{S}]/gu, "").length > 0;
+    const displayAnswer = hasReadableAnswer ? formattedAnswer : "详细公式请查看下方引用的论文原文。";
+    elements.answerResult.innerHTML = `<p>${escapeHtml(displayAnswer).replaceAll("\n", "<br>")}</p>`;
     const citations = Array.isArray(payload.citations) ? payload.citations : [];
     elements.answerCitations.innerHTML = citations.map((item) => {
       const source = item.source || {};
@@ -415,8 +442,11 @@
           <article class="evidence-result">
             <div class="evidence-result-head"><span>${escapeHtml(item.citation_id ? `[${item.citation_id}]` : `证据 ${index + 1}`)}</span><strong>${escapeHtml(item.paper_title || item.filename)}</strong></div>
             <div class="evidence-meta"><span>${escapeHtml(location || pageLabel)}</span><span>相关度 ${Number(item.score || 0).toFixed(2)}</span></div>
-            <p>${escapeHtml(item.text)}</p>
-            <button class="evidence-open" type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}">打开原文 · ${escapeHtml(pageLabel)} <span>→</span></button>
+            <details class="evidence-source">
+              <summary>查看原文片段 <span aria-hidden="true">＋</span></summary>
+              <p>${escapeHtml(item.text)}</p>
+              <button class="evidence-open" type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}">打开论文 · ${escapeHtml(pageLabel)} <span>→</span></button>
+            </details>
           </article>
         `;
       })

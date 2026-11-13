@@ -2173,9 +2173,30 @@ body.drawer-open .paper-drawer {
   font-size: 9px;
 }
 
+.evidence-source {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.evidence-source summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0 2px;
+  color: var(--primary-strong);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.evidence-source summary::-webkit-details-marker { display: none; }
+.evidence-source summary span { color: #8b91aa; font-size: 14px; }
+.evidence-source[open] summary span { transform: rotate(45deg); }
+
 .evidence-result p {
   max-height: 13.5em;
-  margin: 15px 0 13px;
+  margin: 10px 0 8px;
   overflow: auto;
   color: var(--ink-soft);
   font-family: Georgia, "Times New Roman", "Songti SC", serif;

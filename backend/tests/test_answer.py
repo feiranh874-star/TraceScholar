@@ -251,6 +251,7 @@ def test_grounded_prompt_marks_evidence_as_untrusted_data():
 
     assert "untrusted reference material" in messages[0]["content"]
     assert "Never invent" in messages[0]["content"]
+    assert "do not reproduce equations, raw LaTeX" in messages[0]["content"]
     assert "[E1]" in messages[1]["content"]
     assert "<evidence>" in messages[1]["content"]
 
