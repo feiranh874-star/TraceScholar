@@ -2,7 +2,7 @@
 
 可信科研助手 Agent，面向论文 PDF 的解析、版本识别、可溯源问答和多论文比较。
 
-> 第一阶段基础系统已完成；第二阶段的本地证据检索与 DeepSeek 证据回答已接入，并在本地完成真实接口验证。向量检索与重排仍在后续计划中。
+> 第一阶段基础系统与第二阶段证据问答闭环已完成；本地检索、DeepSeek 证据回答、引用校验和原文跳页均已验证。向量检索、重排与最小 Agent 属于后续阶段。
 
 ## MVP 演示主线
 
@@ -72,5 +72,5 @@ uvicorn app.main:app --reload --port 8000
 - 官方 PDF、个人数据、模型密钥、数据库和运行时索引不进入仓库。
 - 毕设平台只复用通用工程能力，不直接复制业务页面和数据库。
 
-详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+阶段总结见 [docs/PHASE1_SUMMARY.md](docs/PHASE1_SUMMARY.md) 和 [docs/PHASE2_SUMMARY.md](docs/PHASE2_SUMMARY.md)；详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 组委会样例回归结果见 [docs/OFFICIAL_ACCEPTANCE.md](docs/OFFICIAL_ACCEPTANCE.md)。
