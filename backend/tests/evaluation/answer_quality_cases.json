@@ -1,0 +1,10 @@
+[
+  {"id":"t02","question":"Transformer 架构主要去掉了哪些结构，改用什么机制？","answerable":true,"expected_pages":[1,2],"fact_groups":[["注意力机制","attention mechanism"],["循环网络","循环结构","recurrent network","recurrence"],["卷积网络","卷积结构","convolution"]]},
+  {"id":"t05","question":"How does the decoder prevent a position from attending to future outputs?","answerable":true,"expected_pages":[3],"fact_groups":[["mask","掩码","遮罩"],["subsequent positions","future positions","后续位置","未来位置"]]},
+  {"id":"t06","question":"Scaled Dot-Product Attention 如何计算 query 和 key 的权重？","answerable":true,"expected_pages":[4],"fact_groups":[["query 和 key","query and key","查询和键"],["softmax"],["value","值向量","values"],["权重","weights"]]},
+  {"id":"t09","question":"How does multi-head attention combine the outputs of its heads?","answerable":true,"expected_pages":[5],"fact_groups":[["concatenate","concatenation","拼接","连接"],["project","projection","投影"]]},
+  {"id":"t14","question":"Transformer 为什么需要 positional encoding？它怎样加入输入？","answerable":true,"expected_pages":[6],"fact_groups":[["序列顺序","顺序信息","位置信息","order of the sequence","sequence order","position information"],["正弦","sine"],["余弦","cosine"],["输入嵌入","input embeddings"],["相加","sum","add"]]},
+  {"id":"t18","question":"论文报告的 Transformer big 在英德翻译任务上的 BLEU 分数是多少？","answerable":true,"expected_pages":[8],"fact_groups":[["28.4"],["英德","English-to-German","English-German"]]},
+  {"id":"t21","question":"What medication did the Transformer authors recommend for patients with headaches?","answerable":false,"expected_pages":[],"fact_groups":[]},
+  {"id":"t22","question":"Transformer 论文中作者建议患者使用哪种抗生素治疗感染？","answerable":false,"expected_pages":[],"fact_groups":[]}
+]

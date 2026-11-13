@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,13 @@ def test_official_bilingual_retrieval_benchmark(client):
     answerable = []
     answerable_top_one = []
     false_positives = []
+    fact_coverage = []
+    expected_facts = json.loads(
+        (Path(__file__).parent / "evaluation" / "transformer_v7_evidence_facts.json").read_text(encoding="utf-8")
+    )
+
+    def normalize(value: str) -> str:
+        return re.sub(r"[^a-z0-9\u3400-\u9fff]+", "", value.casefold())
 
     for case in cases:
         response = client.post(
@@ -105,11 +113,21 @@ def test_official_bilingual_retrieval_benchmark(client):
             any(item["source"]["page_start"] <= page <= item["source"]["page_end"] for page in target_pages)
             for item in items[:3]
         ))
+        fact_groups = expected_facts.get(case["id"], [])
+        evidence = normalize(" ".join(item["text"] for item in items[:3]))
+        if fact_groups:
+            supported = sum(
+                any(normalize(term) in evidence for term in alternatives)
+                for alternatives in fact_groups
+            )
+            fact_coverage.append(supported / len(fact_groups))
 
     recall_at_3 = sum(answerable) / max(1, len(answerable))
     hit_at_1 = sum(answerable_top_one) / max(1, len(answerable_top_one))
     assert hit_at_1 >= 0.85, f"page hit@1 was {hit_at_1:.0%}"
     assert recall_at_3 >= 0.90, f"page recall@3 was {recall_at_3:.0%}"
+    mean_fact_coverage = sum(fact_coverage) / max(1, len(fact_coverage))
+    assert mean_fact_coverage >= 0.90, f"required fact support coverage@3 was {mean_fact_coverage:.0%}"
     assert not [case_id for case_id in false_positives if case_id]
 
     agent_response = client.post(

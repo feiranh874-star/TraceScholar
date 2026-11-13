@@ -23,7 +23,7 @@ class LLMServiceError(RuntimeError):
 
 ANSWER_MODES = {
     "definition": "Define the key concept first, then explain its role using only the cited evidence.",
-    "method": "Explain the method as a short ordered sequence and state what each step does.",
+    "method": "Explain the method as a short ordered sequence and state what each step does. If the evidence describes a main mechanism together with a companion condition or safeguard, include both.",
     "result": "Extract reported metrics with their task or dataset context; never infer missing numbers.",
     "comparison": "Compare only attributes supported by the retrieved sources and cite each side. If evidence does not cover multiple sources, say so clearly.",
     "summary": "Summarize the central claim and supporting method or result in up to three concise points.",

@@ -169,8 +169,12 @@ def search_evidence(
     *,
     paper_ids: list[str] | None = None,
     limit: int = 6,
+    ranker: str = "bm25",
 ) -> tuple[list[RetrievalEvidenceRecord], int]:
-    """Rank local chunks and return evidence with intact source metadata."""
+    """Rank local chunks with the selected lexical/vector ranking strategy."""
+
+    if ranker not in {"legacy", "bm25", "cosine", "hybrid"}:
+        raise ValueError("ranker must be legacy, bm25, cosine, or hybrid")
 
     query_variants = [Counter(tokens) for tokens in _query_variants(question) if tokens]
     if not query_variants:
@@ -190,16 +194,29 @@ def search_evidence(
     ))
     phrases = _translated_phrases(question)
     method_question = any(term in normalized_question for term in ("如何", "怎么", "怎样", "how"))
-    ranked: list[tuple[float, dict[str, Any]]] = []
+    average_length = sum(len(candidate["tokens"]) for candidate in candidates) / max(1, len(candidates))
     document_count = len(candidates)
     query_terms = set().union(*(set(query_counts) for query_counts in query_variants))
+    active_rankers = ("legacy", "bm25", "cosine") if ranker == "hybrid" else (ranker,)
+    raw_scores: dict[str, dict[int, float]] = {name: {} for name in active_rankers}
+    boosts: dict[int, float] = {}
     for candidate in candidates:
         token_counts = Counter(candidate["tokens"])
-        scores = []
+        candidate_id = id(candidate)
+        scores = {name: [] for name in raw_scores}
+        document_norm = 1.0
+        if "cosine" in active_rankers:
+            document_norm = math.sqrt(sum(
+                ((1 + math.log(frequency)) * math.log(1 + (document_count + 1) / (document_frequency[token] + 1))) ** 2
+                for token, frequency in token_counts.items()
+            )) or 1.0
         for query_counts in query_variants:
             if definition_question and not set(query_counts).issubset(token_counts):
                 continue
-            score = 0.0
+            legacy_score = 0.0
+            bm25_score = 0.0
+            cosine_dot = 0.0
+            query_norm_squared = 0.0
             matched = 0
             for token, query_weight in query_counts.items():
                 frequency = token_counts.get(token, 0)
@@ -207,39 +224,83 @@ def search_evidence(
                     continue
                 matched += 1
                 inverse_frequency = math.log(1 + (document_count + 1) / (document_frequency[token] + 1))
-                score += query_weight * inverse_frequency * (1 + math.log(frequency))
+                bm25_idf = math.log(1 + (document_count - document_frequency[token] + 0.5) / (document_frequency[token] + 0.5))
+                if "legacy" in active_rankers:
+                    legacy_score += query_weight * inverse_frequency * (1 + math.log(frequency))
+                if "bm25" in active_rankers:
+                    length_normalizer = 1.5 * (1 - 0.75 + 0.75 * len(candidate["tokens"]) / max(1.0, average_length))
+                    bm25_score += query_weight * bm25_idf * frequency * 2.5 / (frequency + length_normalizer)
+                if "cosine" in active_rankers:
+                    query_tf = 1 + math.log(query_weight)
+                    query_weight_tfidf = query_tf * inverse_frequency
+                    document_weight_tfidf = (1 + math.log(frequency)) * inverse_frequency
+                    cosine_dot += query_weight_tfidf * document_weight_tfidf
+                    query_norm_squared += query_weight_tfidf**2
             if not matched:
                 continue
             coverage = matched / max(1, len(query_counts))
             if len(query_counts) >= 3 and (matched < 2 or coverage < 0.5):
                 continue
-            scores.append(score * (0.65 + coverage))
-        if not scores:
+            if "legacy" in active_rankers:
+                scores["legacy"].append(legacy_score * (0.65 + coverage))
+            if "bm25" in active_rankers:
+                scores["bm25"].append(bm25_score * (0.65 + coverage))
+            if "cosine" in active_rankers:
+                cosine_score = cosine_dot / (math.sqrt(query_norm_squared) * document_norm)
+                scores["cosine"].append(cosine_score * (0.65 + coverage))
+        if not any(scores.values()):
             continue
-        score = max(scores)
-        score /= 1 + math.log1p(max(1, len(candidate["tokens"]))) * 0.08
         section_terms = set(tokenize(candidate.get("section_title") or ""))
-        score += 2.5 * len(query_terms & section_terms)
+        boost = 2.5 * len(query_terms & section_terms)
         haystack = _normalize(candidate["text"])
         # A passage that explicitly describes the method should outrank a
         # results discussion that happens to repeat the same keywords.
-        score += sum(2.5 for phrase in phrases if " " in phrase and phrase in haystack)
+        boost += sum(2.5 for phrase in phrases if " " in phrase and phrase in haystack)
         if method_question:
-            score += sum(6.0 for marker in ("to perform zero-shot", "in a bit more detail", "specifically, we", "by comparing") if marker in haystack)
+            boost += sum(6.0 for marker in ("to perform zero-shot", "in a bit more detail", "specifically, we", "by comparing") if marker in haystack)
         if normalized_question and normalized_question in haystack:
-            score += 2.5
+            boost += 2.5
         title = _normalize(str(candidate["metadata"].get("title") or ""))
         if any(token in title for query_counts in query_variants for token in query_counts):
-            score += 0.35
-        ranked.append((score, candidate))
+            boost += 0.35
+        boosts[candidate_id] = boost
+        length_penalty = 1 + math.log1p(max(1, len(candidate["tokens"]))) * 0.08
+        for name in raw_scores:
+            if scores[name]:
+                raw_scores[name][candidate_id] = max(scores[name]) / length_penalty
 
-    ranked.sort(
-        key=lambda item: (
-            -item[0],
-            item[1]["metadata"].get("created_at", ""),
-            item[1]["chunk"].get("chunk_id", ""),
+    candidate_by_id = {id(candidate): candidate for candidate in candidates if id(candidate) in boosts}
+    candidate_order = {id(candidate): index for index, candidate in enumerate(candidates)}
+    mode_ranks: dict[str, dict[int, int]] = {}
+    for name, score_map in raw_scores.items():
+        order = sorted(
+            score_map,
+            key=lambda identifier: (-score_map[identifier], -boosts[identifier], candidate_order[identifier]),
         )
-    )
+        mode_ranks[name] = {identifier: rank for rank, identifier in enumerate(order, start=1)}
+
+    if ranker == "hybrid":
+        fusion_scores = {
+            identifier: sum(1 / (60 + ranks[identifier]) for ranks in mode_ranks.values() if identifier in ranks)
+            for identifier in candidate_by_id
+        }
+        ordered_ids = sorted(
+            fusion_scores,
+            key=lambda identifier: (-fusion_scores[identifier], -boosts[identifier], candidate_order[identifier]),
+        )
+        ranked = [(fusion_scores[identifier] * 1000, candidate_by_id[identifier]) for identifier in ordered_ids]
+    else:
+        mode = ranker
+        ordered_ids = sorted(
+            raw_scores[mode],
+            key=lambda identifier: (
+                -raw_scores[mode][identifier],
+                -boosts[identifier],
+                candidate_order[identifier],
+            ),
+        )
+        ranked = [(raw_scores[mode][identifier] + boosts[identifier], candidate_by_id[identifier]) for identifier in ordered_ids]
+
     results: list[RetrievalEvidenceRecord] = []
     for score, candidate in ranked[:limit]:
         chunk = candidate["chunk"]

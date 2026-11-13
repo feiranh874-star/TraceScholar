@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import papers
 from app.main import app
+from app.retrieval import search_evidence
 
 
 @pytest.fixture
@@ -57,6 +58,31 @@ def test_retrieval_returns_relevant_chunk_with_page_source(client):
     assert top["paper_title"] == "Attention Paper"
     assert "query" in top["text"].lower()
     assert top["score"] > 0
+
+
+def test_bm25_and_sparse_cosine_rankers_keep_paper_evidence(client):
+    attention = upload(
+        client,
+        "Attention Paper",
+        "The attention layer compares query vectors with keys and combines value vectors using weights.",
+    )
+    upload(
+        client,
+        "Optimization Paper",
+        "Gradient descent updates neural network parameters using the loss derivative.",
+    )
+
+    bm25_items, _ = search_evidence("How does attention compare query and key vectors?", ranker="bm25")
+    cosine_items, _ = search_evidence("How does attention compare query and key vectors?", ranker="cosine")
+
+    assert bm25_items[0].source.paper_id == attention["paper_id"]
+    assert cosine_items[0].source.paper_id == attention["paper_id"]
+
+
+def test_retrieval_rejects_unknown_ranker(client):
+    upload(client, "Attention", "Attention maps queries and keys to values.")
+    with pytest.raises(ValueError, match="ranker"):
+        search_evidence("attention query keys", ranker="neural")
 
 
 def test_retrieval_can_limit_search_to_selected_paper(client):
