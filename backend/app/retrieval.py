@@ -59,7 +59,11 @@ def _query_variants(question: str) -> list[list[str]]:
     """Preserve literal matching and add a narrow offline Chinese-English query."""
 
     literal_tokens = tokenize(question)
-    variants = [literal_tokens]
+    definition_question = bool(re.fullmatch(
+        r"(?:什么是|何为|解释一下|请解释)\s*(?:attention|注意力(?:机制)?)\s*[？?。!]*",
+        _normalize(question),
+    ))
+    variants = [] if definition_question else [literal_tokens]
     remaining = _normalize(question)
     translated: list[str] = []
     for chinese, english in sorted(RESEARCH_TERMS.items(), key=lambda pair: -len(pair[0])):
@@ -70,8 +74,13 @@ def _query_variants(question: str) -> list[list[str]]:
     # context to retrieve an unrelated paper. Unrecognized Chinese stays in
     # the literal query instead of being silently translated or invented.
     translated = list(dict.fromkeys(WORD_PATTERN.findall(_normalize(question)) + translated))
-    if len(translated) >= 2 and translated != literal_tokens:
+    if len(translated) >= 2 and translated != literal_tokens and not definition_question:
         variants.append(translated)
+    # Short definitional questions contain little context: resolve the known
+    # research term to two related English concepts rather than matching the
+    # lone word 'attention' in any unrelated paper.
+    if definition_question:
+        variants.extend((["attention", "function"], ["attention", "mechanism"]))
     return variants
 
 
@@ -146,6 +155,10 @@ def search_evidence(
         document_frequency.update(set(candidate["tokens"]))
 
     normalized_question = _normalize(question).strip()
+    definition_question = bool(re.fullmatch(
+        r"(?:什么是|何为|解释一下|请解释)\s*(?:attention|注意力(?:机制)?)\s*[？?。!]*",
+        normalized_question,
+    ))
     phrases = _translated_phrases(question)
     method_question = any(term in normalized_question for term in ("如何", "怎么", "怎样", "how"))
     ranked: list[tuple[float, dict[str, Any]]] = []
@@ -154,6 +167,8 @@ def search_evidence(
         token_counts = Counter(candidate["tokens"])
         scores = []
         for query_counts in query_variants:
+            if definition_question and not set(query_counts).issubset(token_counts):
+                continue
             score = 0.0
             matched = 0
             for token, query_weight in query_counts.items():

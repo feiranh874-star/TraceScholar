@@ -186,3 +186,23 @@ def test_chinese_question_works_with_legacy_english_paper(client):
     assert response.status_code == 200
     assert response.json()["items"]
     assert response.json()["items"][0]["source"]["paper_id"] == paper["paper_id"]
+
+
+@pytest.mark.parametrize("question", ["什么是attention", "什么是注意力机制？"])
+def test_short_chinese_attention_definition_finds_english_source(client, question):
+    paper = upload(
+        client, "Attention Is All You Need",
+        "An attention function can be described as mapping a query and a set "
+        "of key-value pairs to an output. We use an attention mechanism.",
+    )
+    upload(client, "CLIP", "The text encoder uses masked self-attention to learn language.")
+    response = client.post("/api/research/retrieve", json={"question": question})
+    assert response.status_code == 200
+    assert response.json()["items"]
+    assert response.json()["items"][0]["source"]["paper_id"] == paper["paper_id"]
+
+
+def test_attention_definition_does_not_promote_word_mention_alone(client):
+    upload(client, "Unrelated", "We mention attention in a passing comment.")
+    response = client.post("/api/research/retrieve", json={"question": "什么是attention"})
+    assert response.json()["items"] == []
