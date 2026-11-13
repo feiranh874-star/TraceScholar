@@ -17,6 +17,8 @@ def test_home_serves_chinese_workspace():
     assert "researchForm" in response.text
     assert "researchAnswer" in response.text
     assert "answerResult" in response.text
+    assert "查看助手执行步骤" in response.text
+    assert "智能体回答" in response.text
 
 
 def test_frontend_assets_are_available():
@@ -27,6 +29,7 @@ def test_frontend_assets_are_available():
     assert stylesheet.headers["content-type"].startswith("text/css")
     assert script.status_code == 200
     assert "javascript" in script.headers["content-type"]
+    assert "/api/research/agent" in script.text
 
 
 def test_developer_docs_remain_available():
@@ -39,6 +42,7 @@ def test_developer_docs_remain_available():
     assert "/api/papers" in openapi.json()["paths"]
     assert "/api/research/retrieve" in openapi.json()["paths"]
     assert "/api/research/answer" in openapi.json()["paths"]
+    assert "/api/research/agent" in openapi.json()["paths"]
 
 
 def test_unknown_api_path_keeps_json_404():

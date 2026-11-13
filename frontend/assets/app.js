@@ -57,6 +57,8 @@
     answerResult: byId("answerResult"),
     answerModel: byId("answerModel"),
     answerCitations: byId("answerCitations"),
+    agentTrace: byId("agentTrace"),
+    agentSteps: byId("agentSteps"),
     evidenceCount: byId("evidenceCount"),
     evidenceResults: byId("evidenceResults"),
     toastRegion: byId("toastRegion"),
@@ -370,6 +372,8 @@
     elements.answerResult.innerHTML = "";
     elements.answerCitations.innerHTML = "";
     elements.answerModel.textContent = "";
+    elements.agentTrace.hidden = true;
+    elements.agentSteps.innerHTML = "";
   }
 
   function answerTextForDisplay(value) {
@@ -398,9 +402,32 @@
 
   function renderAnswer(payload) {
     elements.answerPanel.classList.remove("is-hidden");
-    elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "证据约束回答";
-    if (payload.insufficient || !payload.answer) {
+    elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "本地工具编排";
+    const steps = Array.isArray(payload.steps) ? payload.steps : [];
+    const toolLabels = {
+      intent_router: "识别问题类型",
+      tool_selector: "选择处理工具",
+      retrieve_evidence: "搜索论文证据",
+      evidence_gate: "检查证据来源",
+      generate_grounded_answer: "生成证据回答",
+      citation_validator: "核对引用",
+    };
+    elements.agentSteps.innerHTML = steps.map((step) => `
+      <li class="agent-step is-${escapeHtml(step.status)}"><strong>${escapeHtml(toolLabels[step.tool] || step.tool)}</strong><span>${escapeHtml(step.detail)}</span></li>
+    `).join("");
+    elements.agentTrace.hidden = steps.length === 0;
+    if (payload.insufficient) {
       elements.answerResult.innerHTML = '<div class="answer-insufficient"><strong>当前资料不足</strong><span>未调用模型补写缺失结论，请先导入更相关的论文或调整问题。</span></div>';
+      elements.answerCitations.innerHTML = "";
+      return;
+    }
+    if (payload.route === "retrieve_only") {
+      elements.answerResult.innerHTML = '<div class="agent-retrieval-note"><strong>已完成证据检索</strong><span>按照你的请求，本次只检索原文，没有调用模型。请查看下方证据卡片。</span></div>';
+      elements.answerCitations.innerHTML = "";
+      return;
+    }
+    if (!payload.answer) {
+      elements.answerResult.innerHTML = '<div class="answer-insufficient"><strong>暂时没有可展示的回答</strong><span>请调整问题后重试。</span></div>';
       elements.answerCitations.innerHTML = "";
       return;
     }
@@ -511,12 +538,14 @@
     elements.researchAnswer.disabled = true;
     elements.researchAnswer.querySelector("span").textContent = "正在生成…";
     elements.answerPanel.classList.remove("is-hidden");
-    elements.answerModel.textContent = "正在调用 DeepSeek";
+    elements.answerModel.textContent = "正在规划检索步骤";
     elements.answerResult.innerHTML = '<div class="answer-loading"><span>先检索原文证据，再生成带引用的回答…</span></div>';
     elements.answerCitations.innerHTML = "";
+    elements.agentTrace.hidden = true;
+    elements.agentSteps.innerHTML = "";
     try {
       const selectedPaperId = elements.researchPaperScope.value;
-      const response = await fetch("/api/research/answer", {
+      const response = await fetch("/api/research/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ question, paper_ids: selectedPaperId ? [selectedPaperId] : [], limit: 6 }),
@@ -532,7 +561,7 @@
       showToast(message, "error");
     } finally {
       state.answering = false;
-      elements.researchAnswer.querySelector("span").textContent = "生成证据回答";
+      elements.researchAnswer.querySelector("span").textContent = "智能体回答";
       renderResearchScope();
     }
   }

@@ -2054,6 +2054,30 @@ body.drawer-open .paper-drawer {
 .answer-insufficient span { color: var(--muted); font-size: 10px; }
 .answer-insufficient.is-error strong { color: var(--danger); }
 
+.agent-retrieval-note {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border-radius: 11px;
+  background: rgb(91 92 226 / 6%);
+}
+
+.agent-retrieval-note strong { color: var(--primary-strong); }
+.agent-retrieval-note span { color: var(--muted); font-size: 10px; }
+
+.agent-trace {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-trace[hidden] { display: none; }
+.agent-trace summary { padding-top: 11px; color: var(--primary-strong); cursor: pointer; font-size: 10px; font-weight: 700; }
+.agent-trace ol { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.agent-step { display: grid; grid-template-columns: minmax(110px, .32fr) 1fr; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; font-size: 9px; }
+.agent-step strong { color: var(--primary-strong); overflow-wrap: anywhere; }
+.agent-step span { color: var(--ink-soft); }
+.agent-step.is-skipped strong { color: var(--muted); }
+
 .answer-citations {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -12,7 +12,7 @@ from app import research
 from app.config import Settings
 from app.llm import LLMServiceError, build_grounded_messages, generate_grounded_answer
 from app.main import app
-from app.models import RetrievalEvidenceRecord, SourceReference
+from app.models import RetrievalEvidenceRecord, RetrievalRequest, SourceReference
 
 
 @pytest.fixture
@@ -147,6 +147,92 @@ def test_answer_rejects_model_output_without_valid_citation(client, monkeypatch)
     assert "有效证据引用" in response.json()["detail"]
 
 
+def make_agent_evidence() -> RetrievalEvidenceRecord:
+    return RetrievalEvidenceRecord(
+        evidence_id="paper:chunk",
+        text="The Transformer uses self-attention layers. [EVIDENCE DATA]",
+        score=4.0,
+        source=SourceReference(paper_id="paper", work_id="work", page_start=3, page_end=3),
+        filename="attention.pdf",
+        paper_title="Attention Is All You Need",
+        section_title="Encoder and Decoder Stacks",
+    )
+
+
+def test_agent_runs_grounded_answer_tools_and_returns_execution_trace(client, monkeypatch):
+    evidence = make_agent_evidence()
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    calls = []
+    monkeypatch.setattr(research, "search_evidence", lambda *args, **kwargs: ([evidence], 4))
+    monkeypatch.setattr(
+        research,
+        "generate_grounded_answer",
+        lambda *args, **kwargs: calls.append(kwargs.get("answer_mode")) or "The encoder uses self-attention [E1].",
+    )
+
+    response = client.post("/api/research/agent", json={"question": "How does the encoder work?"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "method"
+    assert payload["route"] == "grounded_answer"
+    assert payload["answer"] == "The encoder uses self-attention [E1]."
+    assert payload["citations"][0]["source"]["page_start"] == 3
+    assert [step["tool"] for step in payload["steps"]] == [
+        "intent_router", "tool_selector", "retrieve_evidence", "evidence_gate",
+        "generate_grounded_answer", "citation_validator",
+    ]
+    assert calls == ["method"]
+
+
+def test_agent_evidence_only_route_skips_model_call(client, monkeypatch):
+    monkeypatch.setattr(client.app.state, "settings", Settings())
+    observed_queries = []
+    monkeypatch.setattr(
+        research,
+        "search_evidence",
+        lambda *args, **kwargs: observed_queries.append(args[0]) or ([make_agent_evidence()], 1),
+    )
+
+    def unexpected_model_call(*args, **kwargs):
+        raise AssertionError("evidence-only route must not call the model")
+
+    monkeypatch.setattr(research, "generate_grounded_answer", unexpected_model_call)
+    response = client.post(
+        "/api/research/agent",
+        json={"question": "只检索原文：Transformer encoder"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["route"] == "retrieve_only"
+    assert payload["answer"] is None
+    assert len(payload["items"]) == 1
+    assert payload["steps"][-1]["status"] == "skipped"
+    assert observed_queries == ["Transformer encoder"]
+
+
+def test_agent_stops_when_evidence_gate_has_no_results(client, monkeypatch):
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    monkeypatch.setattr(research, "search_evidence", lambda *args, **kwargs: ([], 7))
+
+    def unexpected_model_call(*args, **kwargs):
+        raise AssertionError("no-evidence route must not call the model")
+
+    monkeypatch.setattr(research, "generate_grounded_answer", unexpected_model_call)
+    response = client.post("/api/research/agent", json={"question": "What is quantum teleportation?"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["insufficient"] is True
+    assert payload["steps"][-1]["tool"] == "evidence_gate"
+    assert payload["steps"][-1]["status"] == "skipped"
+
+
+def test_agent_endpoint_is_in_openapi(client):
+    assert "/api/research/agent" in client.get("/openapi.json").json()["paths"]
+
+
 def test_answer_reports_external_service_failure(client, monkeypatch):
     upload(client, "Attention", "Attention uses query and key vectors to compute weights.")
     monkeypatch.setattr(client.app.state, "settings", configured_settings())
@@ -254,6 +340,11 @@ def test_grounded_prompt_marks_evidence_as_untrusted_data():
     assert "do not reproduce equations, raw LaTeX" in messages[0]["content"]
     assert "[E1]" in messages[1]["content"]
     assert "<evidence>" in messages[1]["content"]
+
+
+def test_grounded_prompt_selects_intent_specific_answer_style():
+    messages = build_grounded_messages("How does it work?", [], answer_mode="method")
+    assert "short ordered sequence" in messages[0]["content"]
 
 
 def test_answer_endpoint_is_in_openapi(client):

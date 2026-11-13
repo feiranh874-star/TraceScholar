@@ -2,11 +2,11 @@
 
 ## 分层
 
-- `backend/app/`：HTTP API、任务编排和鉴权边界。
+- `backend/app/`：HTTP API、论文领域对象、任务编排和鉴权边界；`research.py` 包含研究问答路由和第一版 Agent 流程。
 - `backend/domain/`：论文领域对象和业务规则。
 - `backend/pipeline/`：PDF 解析、OCR、切块、版本识别和索引任务。
-- `backend/retrieval/`：关键词、向量、重排和证据筛选。
-- `backend/agent/`：意图识别、工具选择、重试和回答编排。
+- `backend/app/retrieval.py`：当前关键词检索、术语桥接和证据筛选；向量召回与神经重排尚未接入。
+- `backend/app/research.py`：Agent 意图识别、工具路由、证据检查和回答编排；当前不保存持久化运行日志。
 - `frontend/`：上传、论文库、阅读器、问答和比较界面。
 - `data/`：本地运行数据，不纳入 Git。
 

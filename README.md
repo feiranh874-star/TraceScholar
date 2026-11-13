@@ -2,7 +2,7 @@
 
 可信科研助手 Agent，面向论文 PDF 的解析、版本识别、可溯源问答和多论文比较。
 
-> 第一阶段基础系统与第二阶段证据问答闭环已完成；本地检索、DeepSeek 证据回答、引用校验和原文跳页均已验证。向量检索、重排与最小 Agent 属于后续阶段。
+> 第一、二阶段已完成；第三阶段已加入评测驱动的轻量检索增强和科研 Agent 原型。向量检索与神经重排仍待评估。
 
 ## MVP 演示主线
 
@@ -36,8 +36,10 @@ tests/         自动化测试与人工验收记录
 - [x] 回答提示词优先用文字解释公式；前端隐藏常见 LaTeX 数学块
 - [ ] 论文版本差异分析
 - [x] 严格基于证据的模型回答生成（模拟测试和本地真实 API 调用通过）
+- [x] 最小科研 Agent：意图路由、证据检查、意图适配回答、引用验证与执行步骤展示
+- [x] 官方 Transformer v7 中英检索评测集（22 题；当前 Recall@3 为 100%）
 - [ ] 向量检索与重排
-- [ ] 多论文比较和最小 Agent
+- [ ] 多论文结构化比较
 
 ## 本地启动
 
@@ -72,5 +74,5 @@ uvicorn app.main:app --reload --port 8000
 - 官方 PDF、个人数据、模型密钥、数据库和运行时索引不进入仓库。
 - 毕设平台只复用通用工程能力，不直接复制业务页面和数据库。
 
-阶段总结见 [docs/PHASE1_SUMMARY.md](docs/PHASE1_SUMMARY.md) 和 [docs/PHASE2_SUMMARY.md](docs/PHASE2_SUMMARY.md)；详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+阶段总结见 [docs/PHASE1_SUMMARY.md](docs/PHASE1_SUMMARY.md) 和 [docs/PHASE2_SUMMARY.md](docs/PHASE2_SUMMARY.md)；第三阶段记录见 [docs/PHASE3_PROGRESS.md](docs/PHASE3_PROGRESS.md)，详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 组委会样例回归结果见 [docs/OFFICIAL_ACCEPTANCE.md](docs/OFFICIAL_ACCEPTANCE.md)。

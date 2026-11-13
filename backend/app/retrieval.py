@@ -18,7 +18,20 @@ CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
     "did", "do", "does", "how", "in", "is", "it", "of", "on", "or", "that", "the", "this",
-    "to", "what", "which", "with", "why", "了", "和", "是", "的", "在",
+    "to", "what", "which", "with", "why", "main", "each", "make", "up", "change", "components",
+    "了", "和", "是", "的", "在", "主要", "哪些", "什么", "怎么", "如何",
+}
+
+ENGLISH_ALIASES = {
+    "architectural": "architecture", "architectures": "architecture",
+    "introduced": "propose", "introduces": "propose", "introducing": "propose", "proposed": "propose",
+    "components": "layer", "component": "layer", "layers": "layer",
+    "products": "product", "outputs": "output", "heads": "head",
+    "queries": "query", "keys": "key", "values": "value", "dimensions": "dimension",
+    "divided": "divide", "dividing": "divide", "scaled": "scale", "scaling": "scale",
+    "combines": "concatenate", "combined": "concatenate", "combining": "concatenate",
+    "combine": "concatenate", "concatenates": "concatenate", "concatenated": "concatenate",
+    "functions": "function", "encodings": "encoding", "mechanisms": "mechanism",
 }
 
 # Offline terminology bridge for the initial research-paper demo. This is not
@@ -36,6 +49,10 @@ RESEARCH_TERMS = {
     "编码器": "encoder", "预训练": "pre-trained",
     "提示词": "prompt", "对比学习": "contrastive learning",
     "相似度": "similarity", "准确率": "accuracy",
+    "架构": "architecture", "去掉": "remove", "移除": "remove",
+    "结构": "structure", "机制": "mechanism", "缩放": "scale",
+    "点积注意力": "dot product attention", "头": "head", "维度": "dimension",
+    "归一化": "normalization", "层": "layer", "改用": "use attention",
 }
 
 
@@ -47,7 +64,11 @@ def tokenize(value: str) -> list[str]:
     """Tokenize English words and Chinese unigrams/bigrams without dependencies."""
 
     normalized = _normalize(value)
-    tokens = [token for token in WORD_PATTERN.findall(normalized) if token not in STOPWORDS]
+    tokens = [
+        ENGLISH_ALIASES.get(token, token)
+        for token in WORD_PATTERN.findall(normalized)
+        if token not in STOPWORDS
+    ]
     for run in CJK_PATTERN.findall(normalized):
         characters = [character for character in run if character not in STOPWORDS]
         tokens.extend(characters)
@@ -58,13 +79,21 @@ def tokenize(value: str) -> list[str]:
 def _query_variants(question: str) -> list[list[str]]:
     """Preserve literal matching and add a narrow offline Chinese-English query."""
 
-    literal_tokens = tokenize(question)
+    query_text = _normalize(question)
+    query_text = re.sub(r"square\s+root(?:\s+of)?(?:\s+the\s+key\s+dimension)?", "dk", query_text)
+    query_text = query_text.replace("feed-forward dimension", "dff")
+    query_text = re.sub(
+        r"分别来自哪里|来自哪里|多少个|为什么|为何|如何|怎么|怎样|哪些|哪种|什么是|什么|分别|来自|哪里|多少",
+        " ",
+        query_text,
+    )
+    literal_tokens = tokenize(query_text)
     definition_question = bool(re.fullmatch(
         r"(?:什么是|何为|解释一下|请解释)\s*(?:attention|注意力(?:机制)?)\s*[？?。!]*",
         _normalize(question),
     ))
     variants = [] if definition_question else [literal_tokens]
-    remaining = _normalize(question)
+    remaining = query_text
     translated: list[str] = []
     for chinese, english in sorted(RESEARCH_TERMS.items(), key=lambda pair: -len(pair[0])):
         if chinese in remaining:
@@ -73,7 +102,7 @@ def _query_variants(question: str) -> list[list[str]]:
     # Avoid treating a single broad concept (or a bare acronym) as enough
     # context to retrieve an unrelated paper. Unrecognized Chinese stays in
     # the literal query instead of being silently translated or invented.
-    translated = list(dict.fromkeys(WORD_PATTERN.findall(_normalize(question)) + translated))
+    translated = list(dict.fromkeys(WORD_PATTERN.findall(query_text) + translated))
     if len(translated) >= 2 and translated != literal_tokens and not definition_question:
         variants.append(translated)
     # Short definitional questions contain little context: resolve the known
@@ -163,6 +192,7 @@ def search_evidence(
     method_question = any(term in normalized_question for term in ("如何", "怎么", "怎样", "how"))
     ranked: list[tuple[float, dict[str, Any]]] = []
     document_count = len(candidates)
+    query_terms = set().union(*(set(query_counts) for query_counts in query_variants))
     for candidate in candidates:
         token_counts = Counter(candidate["tokens"])
         scores = []
@@ -188,6 +218,8 @@ def search_evidence(
             continue
         score = max(scores)
         score /= 1 + math.log1p(max(1, len(candidate["tokens"]))) * 0.08
+        section_terms = set(tokenize(candidate.get("section_title") or ""))
+        score += 2.5 * len(query_terms & section_terms)
         haystack = _normalize(candidate["text"])
         # A passage that explicitly describes the method should outrank a
         # results discussion that happens to repeat the same keywords.

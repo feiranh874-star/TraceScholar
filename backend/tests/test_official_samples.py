@@ -1,5 +1,6 @@
 """Optional regression tests for the organizer-provided PDF package."""
 
+import json
 import os
 from pathlib import Path
 
@@ -74,4 +75,48 @@ def test_long_book_parses_all_pages(client):
     paper = response.json()
     assert paper["page_count"] == 541
     assert paper["chunk_count"] >= 500
+
+
+def test_official_bilingual_retrieval_benchmark(client):
+    dataset_path = Path(__file__).parent / "evaluation" / "transformer_v7_questions.json"
+    cases = json.loads(dataset_path.read_text(encoding="utf-8"))
+    upload_sample(client, "1706.03762v7.pdf")
+    answerable = []
+    answerable_top_one = []
+    false_positives = []
+
+    for case in cases:
+        response = client.post(
+            "/api/research/retrieve",
+            json={"question": case["question"], "limit": 6},
+        )
+        assert response.status_code == 200
+        items = response.json()["items"]
+        if not case["answerable"]:
+            false_positives.append(case["id"] if items else None)
+            continue
+        target_pages = set(case["expected_pages"])
+        answerable_top_one.append(bool(items and any(
+            result["source"]["page_start"] <= page <= result["source"]["page_end"]
+            for page in target_pages
+            for result in items[:1]
+        )))
+        answerable.append(any(
+            any(item["source"]["page_start"] <= page <= item["source"]["page_end"] for page in target_pages)
+            for item in items[:3]
+        ))
+
+    recall_at_3 = sum(answerable) / max(1, len(answerable))
+    hit_at_1 = sum(answerable_top_one) / max(1, len(answerable_top_one))
+    assert hit_at_1 >= 0.85, f"page hit@1 was {hit_at_1:.0%}"
+    assert recall_at_3 >= 0.90, f"page recall@3 was {recall_at_3:.0%}"
+    assert not [case_id for case_id in false_positives if case_id]
+
+    agent_response = client.post(
+        "/api/research/agent",
+        json={"question": "只检索原文：Transformer architecture", "limit": 3},
+    )
+    assert agent_response.status_code == 200
+    assert agent_response.json()["route"] == "retrieve_only"
+    assert agent_response.json()["items"]
 

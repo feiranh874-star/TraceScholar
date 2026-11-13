@@ -93,6 +93,18 @@ class AnswerResponse(BaseModel):
     total_candidates: int = Field(default=0, ge=0)
 
 
+class AgentStepRecord(BaseModel):
+    tool: str
+    status: Literal["done", "skipped"]
+    detail: str
+
+
+class AgentResponse(AnswerResponse):
+    intent: Literal["definition", "method", "result", "comparison", "summary", "general"]
+    route: Literal["retrieve_only", "grounded_answer"]
+    steps: list[AgentStepRecord] = Field(default_factory=list)
+
+
 class PaperMetadataRecord(BaseModel):
     paper_id: str
     work_id: str

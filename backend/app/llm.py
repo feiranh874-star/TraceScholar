@@ -21,9 +21,21 @@ class LLMServiceError(RuntimeError):
         self.status_code = status_code
 
 
+ANSWER_MODES = {
+    "definition": "Define the key concept first, then explain its role using only the cited evidence.",
+    "method": "Explain the method as a short ordered sequence and state what each step does.",
+    "result": "Extract reported metrics with their task or dataset context; never infer missing numbers.",
+    "comparison": "Compare only attributes supported by the retrieved sources and cite each side. If evidence does not cover multiple sources, say so clearly.",
+    "summary": "Summarize the central claim and supporting method or result in up to three concise points.",
+    "general": "Answer the question directly and concisely.",
+}
+
+
 def build_grounded_messages(
     question: str,
     evidence: list[RetrievalEvidenceRecord],
+    *,
+    answer_mode: str = "general",
 ) -> list[dict[str, str]]:
     """Build a prompt that treats retrieved paper text as data, never instructions."""
 
@@ -56,6 +68,7 @@ def build_grounded_messages(
                 "Answer in the same language as the question. Explain mathematical relationships in plain "
                 "words when relevant; do not reproduce equations, raw LaTeX, or standalone formula blocks. "
                 "For example, describe what quantities are compared or combined instead of writing symbols."
+                f" Task focus: {ANSWER_MODES.get(answer_mode, ANSWER_MODES['general'])}"
             ),
         },
         {
@@ -73,13 +86,14 @@ def generate_grounded_answer(
     api_key: str,
     model: str,
     timeout_seconds: int = 45,
+    answer_mode: str = "general",
 ) -> str:
     """Call an OpenAI-compatible chat-completions endpoint."""
 
     payload = json.dumps(
         {
             "model": model,
-            "messages": build_grounded_messages(question, evidence),
+            "messages": build_grounded_messages(question, evidence, answer_mode=answer_mode),
             "temperature": 0.1,
             "max_tokens": 800,
             "stream": False,
