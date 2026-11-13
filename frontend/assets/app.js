@@ -6,6 +6,7 @@
     overview: { eyebrow: "研究资料总览", title: "科研工作台" },
     library: { eyebrow: "可信科研知识库", title: "论文库" },
     import: { eyebrow: "PDF 解析入库", title: "导入资料" },
+    research: { eyebrow: "本地可信检索", title: "证据检索" },
   };
 
   const state = {
@@ -15,6 +16,8 @@
     currentPage: 1,
     activeView: "overview",
     uploading: false,
+    retrieving: false,
+    answering: false,
     drawerReturnFocus: null,
     detailRequestId: 0,
   };
@@ -45,6 +48,17 @@
     uploadProgress: byId("uploadProgress"),
     uploadFilename: byId("uploadFilename"),
     uploadResult: byId("uploadResult"),
+    researchForm: byId("researchForm"),
+    researchQuestion: byId("researchQuestion"),
+    researchPaperScope: byId("researchPaperScope"),
+    researchSubmit: byId("researchSubmit"),
+    researchAnswer: byId("researchAnswer"),
+    answerPanel: byId("answerPanel"),
+    answerResult: byId("answerResult"),
+    answerModel: byId("answerModel"),
+    answerCitations: byId("answerCitations"),
+    evidenceCount: byId("evidenceCount"),
+    evidenceResults: byId("evidenceResults"),
     toastRegion: byId("toastRegion"),
     drawer: byId("paperDrawer"),
     drawerBackdrop: byId("drawerBackdrop"),
@@ -138,6 +152,8 @@
     if (/page limit/i.test(value)) return "PDF 页数超过系统限制。";
     if (/too much extracted text/i.test(value)) return "PDF 提取出的文本量超过系统限制。";
     if (/Could not store/i.test(value)) return "文件保存失败，请联系管理员检查服务存储。";
+    if (/模型服务尚未配置|LLM_API_KEY/i.test(value)) return "DeepSeek 尚未配置，请在本地 .env 或 Render Environment 中设置模型信息。";
+    if (/DeepSeek/i.test(value)) return value;
     if (status === 413) return "文件超过系统允许的处理范围。";
     if (status >= 500) return "服务处理失败，请稍后重试。";
     return value || "请求失败，请稍后重试。";
@@ -211,6 +227,7 @@
     elements.pageTitle.textContent = viewLabels[view].title;
     closeMobileNavigation();
     if (view === "library") renderLibrary();
+    if (view === "research") renderResearchScope();
     document.querySelector(".content")?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -332,10 +349,169 @@
       .join("");
   }
 
+  function renderResearchScope() {
+    const currentValue = elements.researchPaperScope.value;
+    elements.researchPaperScope.innerHTML = [
+      `<option value="">全部已入库论文（${state.papers.length}）</option>`,
+      ...state.papers.map(
+        (paper) => `<option value="${escapeHtml(paper.paper_id)}">${escapeHtml(paperTitle(paper))}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</option>`,
+      ),
+    ].join("");
+    if (state.papers.some((paper) => paper.paper_id === currentValue)) {
+      elements.researchPaperScope.value = currentValue;
+    }
+    elements.researchPaperScope.disabled = state.papers.length === 0;
+    elements.researchSubmit.disabled = state.retrieving || state.papers.length === 0;
+    elements.researchAnswer.disabled = state.answering || state.retrieving || state.papers.length === 0;
+  }
+
+  function clearAnswer() {
+    elements.answerPanel.classList.add("is-hidden");
+    elements.answerResult.innerHTML = "";
+    elements.answerCitations.innerHTML = "";
+    elements.answerModel.textContent = "";
+  }
+
+  function renderAnswer(payload) {
+    elements.answerPanel.classList.remove("is-hidden");
+    elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "证据约束回答";
+    if (payload.insufficient || !payload.answer) {
+      elements.answerResult.innerHTML = '<div class="answer-insufficient"><strong>当前资料不足</strong><span>未调用模型补写缺失结论，请先导入更相关的论文或调整问题。</span></div>';
+      elements.answerCitations.innerHTML = "";
+      return;
+    }
+    elements.answerResult.innerHTML = `<p>${escapeHtml(payload.answer).replaceAll("\n", "<br>")}</p>`;
+    const citations = Array.isArray(payload.citations) ? payload.citations : [];
+    elements.answerCitations.innerHTML = citations.map((item) => {
+      const source = item.source || {};
+      const pageLabel = source.page_start === source.page_end ? `第 ${source.page_start} 页` : `第 ${source.page_start}–${source.page_end} 页`;
+      return `<button type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}"><strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.paper_title || item.filename)}</strong><span>${escapeHtml([item.section_title, source.version_label, pageLabel].filter(Boolean).join(" · "))}</span></button>`;
+    }).join("");
+  }
+
+  function renderEvidence(items, totalCandidates) {
+    const results = Array.isArray(items) ? items : [];
+    elements.evidenceCount.textContent = results.length
+      ? `${results.length} 条证据 · 检索 ${totalCandidates} 个文本块`
+      : `0 条证据 · 检索 ${totalCandidates} 个文本块`;
+    if (!results.length) {
+      elements.evidenceResults.innerHTML = `
+        <div class="evidence-empty is-insufficient">
+          <strong>当前资料不足</strong>
+          <span>没有找到能直接支撑该问题的原文片段。请更换关键词、切换论文范围，或先导入相关资料。</span>
+        </div>
+      `;
+      return;
+    }
+
+    elements.evidenceResults.innerHTML = results
+      .map((item, index) => {
+        const source = item.source || {};
+        const pageLabel = source.page_start === source.page_end
+          ? `第 ${source.page_start} 页`
+          : `第 ${source.page_start}–${source.page_end} 页`;
+        const location = [item.section_title, source.version_label, pageLabel].filter(Boolean).join(" · ");
+        return `
+          <article class="evidence-result">
+            <div class="evidence-result-head"><span>${escapeHtml(item.citation_id ? `[${item.citation_id}]` : `证据 ${index + 1}`)}</span><strong>${escapeHtml(item.paper_title || item.filename)}</strong></div>
+            <div class="evidence-meta"><span>${escapeHtml(location || pageLabel)}</span><span>相关度 ${Number(item.score || 0).toFixed(2)}</span></div>
+            <p>${escapeHtml(item.text)}</p>
+            <button class="evidence-open" type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}">打开原文 · ${escapeHtml(pageLabel)} <span>→</span></button>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  async function retrieveEvidence() {
+    const question = elements.researchQuestion.value.trim();
+    if (question.length < 2) {
+      showToast("请输入至少 2 个字符的研究问题。", "error");
+      elements.researchQuestion.focus();
+      return;
+    }
+    if (!state.papers.length) {
+      showToast("请先导入至少一篇论文。", "error");
+      return;
+    }
+
+    state.retrieving = true;
+    clearAnswer();
+    elements.researchSubmit.disabled = true;
+    elements.researchAnswer.disabled = true;
+    elements.researchSubmit.querySelector("span").textContent = "正在检索…";
+    elements.evidenceCount.textContent = "正在扫描论文文本块";
+    elements.evidenceResults.innerHTML = '<div class="evidence-empty is-loading"><span>正在定位相关原文、章节和页码…</span></div>';
+
+    try {
+      const selectedPaperId = elements.researchPaperScope.value;
+      const response = await fetch("/api/research/retrieve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ question, paper_ids: selectedPaperId ? [selectedPaperId] : [], limit: 6 }),
+      });
+      if (!response.ok) throw await responseError(response);
+      const payload = await response.json();
+      renderEvidence(payload.items, Number(payload.total_candidates) || 0);
+    } catch (error) {
+      const message = friendlyError(error, "证据检索失败，请稍后重试。");
+      elements.evidenceCount.textContent = "检索失败";
+      elements.evidenceResults.innerHTML = `<div class="evidence-empty is-error"><strong>无法完成检索</strong><span>${escapeHtml(message)}</span></div>`;
+      showToast(message, "error");
+    } finally {
+      state.retrieving = false;
+      elements.researchSubmit.querySelector("span").textContent = "检索原文证据";
+      renderResearchScope();
+    }
+  }
+
+  async function generateAnswer() {
+    const question = elements.researchQuestion.value.trim();
+    if (question.length < 2) {
+      showToast("请输入至少 2 个字符的研究问题。", "error");
+      elements.researchQuestion.focus();
+      return;
+    }
+    if (!state.papers.length) {
+      showToast("请先导入至少一篇论文。", "error");
+      return;
+    }
+    state.answering = true;
+    elements.researchSubmit.disabled = true;
+    elements.researchAnswer.disabled = true;
+    elements.researchAnswer.querySelector("span").textContent = "正在生成…";
+    elements.answerPanel.classList.remove("is-hidden");
+    elements.answerModel.textContent = "正在调用 DeepSeek";
+    elements.answerResult.innerHTML = '<div class="answer-loading"><span>先检索原文证据，再生成带引用的回答…</span></div>';
+    elements.answerCitations.innerHTML = "";
+    try {
+      const selectedPaperId = elements.researchPaperScope.value;
+      const response = await fetch("/api/research/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ question, paper_ids: selectedPaperId ? [selectedPaperId] : [], limit: 6 }),
+      });
+      if (!response.ok) throw await responseError(response);
+      const payload = await response.json();
+      renderAnswer(payload);
+      renderEvidence(payload.items, Number(payload.total_candidates) || 0);
+    } catch (error) {
+      const message = friendlyError(error, "证据回答生成失败，请稍后重试。");
+      elements.answerModel.textContent = "生成失败";
+      elements.answerResult.innerHTML = `<div class="answer-insufficient is-error"><strong>无法生成回答</strong><span>${escapeHtml(message)}</span></div>`;
+      showToast(message, "error");
+    } finally {
+      state.answering = false;
+      elements.researchAnswer.querySelector("span").textContent = "生成证据回答";
+      renderResearchScope();
+    }
+  }
+
   function renderAll() {
     renderStats();
     renderRecent();
     renderLibrary();
+    renderResearchScope();
   }
 
   function setLibraryLoading() {
@@ -408,7 +584,7 @@
     }
   }
 
-  async function openPaper(paperId, trigger = document.activeElement) {
+  async function openPaper(paperId, trigger = document.activeElement, initialPage = 1) {
     const requestId = ++state.detailRequestId;
     state.currentPaper = null;
     state.drawerReturnFocus = trigger instanceof HTMLElement ? trigger : null;
@@ -435,13 +611,13 @@
       const paper = await response.json();
       if (requestId !== state.detailRequestId) return;
       state.currentPaper = paper;
-      state.currentPage = 1;
+      state.currentPage = Math.min(paper.page_count, Math.max(1, Number(initialPage) || 1));
       elements.pageNumber.disabled = false;
       elements.drawerTitle.textContent = paperTitle(paper);
       elements.pageNumber.max = String(paper.page_count);
       elements.pageTotal.textContent = `/ ${paper.page_count}`;
       renderMetadata(paper);
-      await loadPage(1);
+      await loadPage(state.currentPage);
     } catch (error) {
       if (requestId !== state.detailRequestId) return;
       const message = friendlyError(error, "论文详情读取失败。");
@@ -639,6 +815,11 @@
     });
 
     elements.refreshPapers.addEventListener("click", () => loadPapers());
+    elements.researchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      retrieveEvidence();
+    });
+    elements.researchAnswer.addEventListener("click", generateAnswer);
     elements.fileInput.addEventListener("change", () => uploadFile(elements.fileInput.files?.[0]));
     bindDropzone(elements.miniDropzone);
     bindDropzone(elements.largeDropzone);
@@ -652,6 +833,8 @@
 
       const resultOpen = event.target.closest("[data-result-open]");
       if (resultOpen) openPaper(resultOpen.dataset.resultOpen, resultOpen);
+      const evidenceOpen = event.target.closest("[data-evidence-paper]");
+      if (evidenceOpen) openPaper(evidenceOpen.dataset.evidencePaper, evidenceOpen, evidenceOpen.dataset.evidencePage);
       if (event.target.closest("[data-result-library]")) navigateTo("library");
       if (event.target.closest("[data-upload-again]")) resetUploadPanel({ choose: true });
       if (event.target.closest("[data-clear-search]")) {

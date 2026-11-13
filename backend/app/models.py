@@ -58,6 +58,41 @@ class EvidenceRecord(BaseModel):
     source: SourceReference
 
 
+class RetrievalRequest(BaseModel):
+    """A paper-grounded search request used before model generation."""
+
+    question: str = Field(min_length=2, max_length=500)
+    paper_ids: list[str] = Field(default_factory=list, max_length=50)
+    limit: int = Field(default=6, ge=1, le=12)
+
+
+class RetrievalEvidenceRecord(EvidenceRecord):
+    paper_title: str | None = None
+    filename: str
+    section_title: str | None = None
+
+
+class RetrievalResponse(BaseModel):
+    question: str
+    total_candidates: int = Field(ge=0)
+    items: list[RetrievalEvidenceRecord] = Field(default_factory=list)
+
+
+class AnswerCitationRecord(RetrievalEvidenceRecord):
+    citation_id: str
+
+
+class AnswerResponse(BaseModel):
+    question: str
+    answer: str | None = None
+    insufficient: bool
+    provider: str | None = None
+    model: str | None = None
+    citations: list[AnswerCitationRecord] = Field(default_factory=list)
+    items: list[RetrievalEvidenceRecord] = Field(default_factory=list)
+    total_candidates: int = Field(default=0, ge=0)
+
+
 class PaperMetadataRecord(BaseModel):
     paper_id: str
     work_id: str

@@ -62,7 +62,7 @@
 | MAX_REQUEST_BYTES | 54525952 |
 | MAX_STORAGE_BYTES | 536870912 |
 
-目前的 PDF 演示不需要模型 API 密钥，先不要填 LLM_API_KEY。
+PDF 导入和本地证据检索无需模型密钥。要启用“生成证据回答”，在 Render 的 Environment 中自行增加 `LLM_PROVIDER=deepseek`、`LLM_BASE_URL=https://api.deepseek.com`、`LLM_MODEL=deepseek-flash` 和 `LLM_API_KEY`（真实密钥）。未配置时站点照常启动，只有模型回答按钮提示未配置。调用模型会按 DeepSeek 实际用量计费；不要把密钥写入仓库、截图或聊天。本地真实调用已验证，公网 Render 仍需单独配置和验收；启用前应设置调用限额并评估演示账号共享造成的费用风险。
 如果需要生成密码，可以在本机终端运行 openssl rand -hex 24，将结果只放进平台 Secret 面板。
 不要把密码发到聊天里，也不要在链接中加入用户名和密码。
 

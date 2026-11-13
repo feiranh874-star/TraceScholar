@@ -13,6 +13,10 @@ def test_home_serves_chinese_workspace():
     assert response.headers["content-type"].startswith("text/html")
     assert "科研工作台" in response.text
     assert "可信科研助手" in response.text
+    assert "证据检索" in response.text
+    assert "researchForm" in response.text
+    assert "researchAnswer" in response.text
+    assert "answerResult" in response.text
 
 
 def test_frontend_assets_are_available():
@@ -33,6 +37,8 @@ def test_developer_docs_remain_available():
     assert openapi.status_code == 200
     assert "/" not in openapi.json()["paths"]
     assert "/api/papers" in openapi.json()["paths"]
+    assert "/api/research/retrieve" in openapi.json()["paths"]
+    assert "/api/research/answer" in openapi.json()["paths"]
 
 
 def test_unknown_api_path_keeps_json_404():

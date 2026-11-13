@@ -7,3 +7,4 @@ pydantic==2.14.3
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
 PyMuPDF==1.28.2
+certifi==2026.10.23

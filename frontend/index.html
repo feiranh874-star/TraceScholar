@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css" />
+    <link rel="stylesheet" href="/assets/app.css?v=3" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,10 +22,11 @@
           <button class="nav-item is-active" data-view="overview"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>工作台</button>
           <button class="nav-item" data-view="library"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v15.5a1.5 1.5 0 0 1-1.5 1.5h-12A2.5 2.5 0 0 1 4 18.5v-13Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20M8 7h8M8 11h6"/></svg></span>论文库<span class="nav-count" id="sidebarPaperCount">0</span></button>
           <button class="nav-item" data-view="import"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></span>导入资料</button>
+          <button class="nav-item" data-view="research"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5M8 9h5M8 12h3"/></svg></span>证据检索</button>
         </nav>
 
         <div class="nav-section-label">即将开放</div>
-        <div class="disabled-nav"><span><i></i>证据问答</span><span><i></i>多篇对比</span><span><i></i>研究图谱</span></div>
+        <div class="disabled-nav"><span><i></i>多篇对比</span><span><i></i>研究图谱</span></div>
 
         <div class="sidebar-footer">
           <div class="api-state" id="apiState"><span class="status-dot is-checking"></span><div><strong>正在连接</strong><small>科研资料服务</small></div></div>
@@ -73,6 +74,25 @@
             <section class="panel library-panel"><div class="library-controls"><label class="inline-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="librarySearch" type="search" placeholder="在论文库中搜索"/></label><button class="icon-button" id="refreshPapers" title="刷新论文库"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 11M5.5 15A7 7 0 0 0 18 17.5l2-4.5"/></svg></button></div><div class="table-wrap"><table><thead><tr><th>论文</th><th>作者</th><th>页数</th><th>状态</th><th>导入时间</th><th></th></tr></thead><tbody id="libraryTable"></tbody></table></div><div class="empty-state is-hidden" id="libraryEmpty"><div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v16H6.5A2.5 2.5 0 0 1 4 17.5v-12Z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H19"/></svg></div><h3>论文库还是空的</h3><p>导入第一篇 PDF，开始建立可信科研知识库。</p><button class="primary-button" data-go-import>导入第一篇论文</button></div></section>
           </section>
 
+          <section class="view" id="view-research" data-view-panel="research">
+            <div class="section-toolbar"><div><span class="section-kicker">可追溯科研问答</span><h2>先找原文，再生成有依据的回答</h2><p>本地检索保留论文、章节与页码；需要时再调用 DeepSeek，并过滤无法对应到真实证据的引用。</p></div></div>
+            <div class="research-layout">
+              <section class="panel research-compose">
+                <form id="researchForm">
+                  <label for="researchQuestion"><span>研究问题</span><textarea id="researchQuestion" rows="7" minlength="2" maxlength="500" placeholder="例如：Transformer 如何使用 Query、Key 和 Value 计算注意力？" required></textarea></label>
+                  <label for="researchPaperScope"><span>检索范围</span><select id="researchPaperScope"><option value="">全部已入库论文</option></select></label>
+                  <div class="research-actions"><button class="secondary-button" id="researchSubmit" type="submit"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span>只检索原文</span></button><button class="primary-button" id="researchAnswer" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg><span>生成证据回答</span></button></div>
+                </form>
+                <div class="research-note"><strong>调用说明</strong><span>“只检索原文”不产生模型费用；“生成证据回答”才会调用已配置的 DeepSeek API。</span></div>
+              </section>
+              <section class="panel evidence-panel">
+                <section class="answer-panel is-hidden" id="answerPanel" aria-live="polite"><div class="answer-panel-head"><div><span class="section-kicker">DeepSeek 证据回答</span><h3>基于已入库论文</h3></div><span id="answerModel"></span></div><div class="answer-result" id="answerResult"></div><div class="answer-citations" id="answerCitations"></div></section>
+                <div class="panel-header"><div><span class="section-kicker">可追溯结果</span><h3>原文证据</h3></div><span class="evidence-count" id="evidenceCount">等待检索</span></div>
+                <div class="evidence-results" id="evidenceResults"><div class="evidence-empty"><strong>先提出一个研究问题</strong><span>检索结果会保留论文、版本、章节和原始页码。</span></div></div>
+              </section>
+            </div>
+          </section>
+
           <section class="view" id="view-import" data-view-panel="import">
             <div class="section-toolbar"><div><span class="section-kicker">PDF 解析入库</span><h2>导入研究资料</h2><p>系统将提取论文元数据和逐页文本，并标记可能需要 OCR 的页面。</p></div></div>
             <div class="import-layout"><section class="panel full-drop-panel"><div class="large-dropzone" id="largeDropzone" tabindex="0" role="button"><div class="large-upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></div><h3>将论文 PDF 拖放到这里</h3><p>支持可复制文字的 PDF；扫描件会自动标记为待 OCR。</p><button class="primary-button" type="button">选择本地 PDF</button><span class="upload-limits">单个文件不超过 50 MiB · 最多 2000 页 · 不支持加密 PDF</span></div><div class="upload-progress is-hidden" id="uploadProgress"><div class="progress-icon"><span></span></div><div class="progress-copy"><strong id="uploadFilename">正在处理 PDF</strong><span>上传并提取逐页文本，请稍候…</span><div class="progress-track"><i></i></div></div></div><div class="upload-result is-hidden" id="uploadResult"></div></section><aside class="import-guide"><div class="guide-title"><span>处理流程</span><strong>导入后会发生什么？</strong></div><ol class="steps"><li><i>1</i><div><strong>文件安全检查</strong><span>验证格式、大小、页数与加密状态</span></div></li><li><i>2</i><div><strong>逐页解析</strong><span>提取题名、作者、页码和正文文本</span></div></li><li><i>3</i><div><strong>扫描页识别</strong><span>标记缺少可检索文字的页面</span></div></li><li><i>4</i><div><strong>建立可信索引</strong><span>保留论文与原始页码的对应关系</span></div></li></ol><div class="guide-tip"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A7 7 0 1 1 15.5 14.5c-1 .8-1.5 1.7-1.5 3h-4c0-1.3-.5-2.2-1.5-3Z"/></svg><p><strong>推荐测试资料</strong><span>先导入 Transformer 论文 v7，再导入 v1，为后续版本识别做准备。</span></p></div></aside></div>
@@ -86,6 +106,6 @@
 
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/assets/app.js" defer></script>
+    <script src="/assets/app.js?v=3" defer></script>
   </body>
 </html>

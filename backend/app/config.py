@@ -15,6 +15,11 @@ class Settings:
     max_request_bytes: int = 52 * 1024 * 1024
     upload_requests_per_minute: int = 0
     max_concurrent_uploads: int = 2
+    llm_provider: str = ""
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: int = 45
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -33,6 +38,11 @@ class Settings:
             max_request_bytes=int(os.getenv("MAX_REQUEST_BYTES", str(52 * 1024 * 1024))),
             upload_requests_per_minute=int(os.getenv("UPLOAD_REQUESTS_PER_MINUTE", "10" if production else "0")),
             max_concurrent_uploads=int(os.getenv("MAX_CONCURRENT_UPLOADS", "2")),
+            llm_provider=os.getenv("LLM_PROVIDER", "").strip().lower(),
+            llm_base_url=os.getenv("LLM_BASE_URL", "").strip(),
+            llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
+            llm_model=os.getenv("LLM_MODEL", "").strip(),
+            llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "45")),
         )
         settings.validate()
         return settings
@@ -46,5 +56,7 @@ class Settings:
             raise ValueError("Request size and concurrent upload limits must be positive")
         if self.upload_requests_per_minute < 0:
             raise ValueError("UPLOAD_REQUESTS_PER_MINUTE cannot be negative")
+        if self.llm_timeout_seconds < 1:
+            raise ValueError("LLM_TIMEOUT_SECONDS must be positive")
         if self.environment == "production" and not self.upload_requests_per_minute:
             raise ValueError("Production requires a positive upload rate limit")

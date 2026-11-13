@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings
 from app.papers import router as papers_router
+from app.research import router as research_router
 from app.security import DemoGuardMiddleware
 
 
@@ -38,9 +39,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url="/redoc" if settings.enable_api_docs else None,
         openapi_url="/openapi.json" if settings.enable_api_docs else None,
     )
+    application.state.settings = settings
     application.add_middleware(DemoGuardMiddleware, settings=settings)
     application.add_api_route("/health", health, tags=["system"])
     application.include_router(papers_router)
+    application.include_router(research_router)
     if ASSETS_DIR.exists():
         application.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="frontend-assets")
     application.add_api_route("/", frontend_home, include_in_schema=False)
