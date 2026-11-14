@@ -30,6 +30,9 @@ ANSWER_MODES = {
     "general": "Answer the question directly and concisely.",
 }
 
+DEFAULT_MAX_TOKENS = 800
+COMPARISON_MAX_TOKENS = 2000
+
 
 def build_grounded_messages(
     question: str,
@@ -95,7 +98,7 @@ def generate_grounded_answer(
             "model": model,
             "messages": build_grounded_messages(question, evidence, answer_mode=answer_mode),
             "temperature": 0.1,
-            "max_tokens": 800,
+            "max_tokens": COMPARISON_MAX_TOKENS if answer_mode == "comparison" else DEFAULT_MAX_TOKENS,
             "stream": False,
         },
         ensure_ascii=False,
@@ -131,9 +134,15 @@ def generate_grounded_answer(
         raise LLMServiceError("DeepSeek 返回了无法解析的响应。") from exc
 
     try:
-        content = result["choices"][0]["message"]["content"].strip()
+        choice = result["choices"][0]
+        message = choice["message"]
+        raw_content = message.get("content")
+        finish_reason = choice.get("finish_reason")
     except (KeyError, IndexError, TypeError, AttributeError) as exc:
         raise LLMServiceError("DeepSeek 响应中缺少回答内容。") from exc
+    content = raw_content.strip() if isinstance(raw_content, str) else ""
     if not content:
+        if finish_reason == "length":
+            raise LLMServiceError("DeepSeek 输出达到长度上限，未生成可显示的最终回答。请缩短问题或稍后重试。")
         raise LLMServiceError("DeepSeek 未返回回答内容。")
     return content

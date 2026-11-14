@@ -382,7 +382,11 @@ def test_answer_reports_external_service_failure(client, monkeypatch):
     assert "DeepSeek" in response.json()["detail"]
 
 
-def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch):
+@pytest.mark.parametrize(
+    "answer_mode, expected_output_limit",
+    [("general", 800), ("comparison", 2000)],
+)
+def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch, answer_mode, expected_output_limit):
     evidence = RetrievalEvidenceRecord(
         evidence_id="paper:chunk", text="Query and key determine attention weights.",
         source=SourceReference(paper_id="paper", work_id="work", page_start=1, page_end=1),
@@ -410,7 +414,7 @@ def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch):
     answer = generate_grounded_answer(
         "How are attention weights computed?", [evidence],
         base_url="https://api.deepseek.com", api_key="test-only-key",
-        model="deepseek-flash", timeout_seconds=12,
+        model="deepseek-flash", timeout_seconds=12, answer_mode=answer_mode,
     )
 
     assert answer == "Query and key [E1]."
@@ -420,9 +424,35 @@ def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch):
     assert isinstance(observed["context"], ssl.SSLContext)
     assert observed["context"].verify_mode == ssl.CERT_REQUIRED
     payload = json.loads(observed["request"].data)
-    assert payload["max_tokens"] == 800
+    assert payload["max_tokens"] == expected_output_limit
     assert payload["model"] == "deepseek-flash"
     assert "test-only-key" not in observed["request"].data.decode()
+
+
+def test_deepseek_empty_response_reports_output_limit_without_exposing_reasoning(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return (
+                b'{"choices":[{"message":{"content":"",'
+                b'"reasoning_content":"private reasoning"},"finish_reason":"length"}]}'
+            )
+
+    monkeypatch.setattr("app.llm.urllib.request.urlopen", lambda *args, **kwargs: Response())
+    with pytest.raises(LLMServiceError) as error:
+        generate_grounded_answer(
+            "Compare two methods", [make_agent_evidence()],
+            base_url="https://api.deepseek.com", api_key="test-only-key",
+            model="deepseek-flash", answer_mode="comparison",
+        )
+
+    assert "达到长度上限" in str(error.value)
+    assert "private reasoning" not in str(error.value)
 
 
 @pytest.mark.parametrize(
