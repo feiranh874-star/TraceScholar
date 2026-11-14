@@ -2,15 +2,15 @@
 
 可信科研助手 Agent，面向论文 PDF 的解析、版本识别、可溯源问答和多论文比较。
 
-> 第一、二阶段已完成；第三阶段已加入 BM25 检索、可追踪科研 Agent 和官方问题集回归。语义 embedding 与生成答案人工评测仍待扩展。
+> 第一至三阶段已完成；第四阶段扩展到 CLIP、深度学习教材和跨论文比较。当前跨论文回答要求每篇所选论文都提供有效原文引用。
 
 ## MVP 演示主线
 
-1. 上传 `1706.03762v7.pdf` 和较旧版本 `v1`。
-2. 解析页面、章节和文本块，并识别为同一论文的不同版本。
-3. 针对论文提问，回答必须附带论文名、页码和原文证据。
-4. 选择两个版本，比较方法、实验和结论的变化。
-5. 点击证据回到对应 PDF 页面。
+1. 上传 Transformer v7、CLIP 和深度学习教材 PDF。
+2. 解析页面、章节和文本块，并保留论文与页码来源。
+3. 针对单篇论文提问，查看带页码的原文证据和回答。
+4. 选择 Transformer 与 CLIP，比较它们的注意力和图文对比学习机制。
+5. 查看每篇来源的引用，再点击跳回相应 PDF 页面。
 
 ## 仓库结构
 
@@ -40,7 +40,8 @@ tests/         自动化测试与人工验收记录
 - [x] 官方 Transformer v7 中英检索评测集（22 题；当前 BM25 Hit@1 与 Recall@3 均为 100%）
 - [x] BM25 检索与 TF-IDF 稀疏向量相似度/排名融合
 - [ ] 稠密语义 embedding 与神经重排
-- [ ] 多论文结构化比较
+- [x] 2–5 篇论文证据比较（逐篇检索、证据门禁、每篇来源引用校验）
+- [x] CLIP、Transformer 与深度学习教材官方材料回归题集
 
 ## 本地启动
 
@@ -75,5 +76,5 @@ uvicorn app.main:app --reload --port 8000
 - 官方 PDF、个人数据、模型密钥、数据库和运行时索引不进入仓库。
 - 毕设平台只复用通用工程能力，不直接复制业务页面和数据库。
 
-阶段总结见 [docs/PHASE1_SUMMARY.md](docs/PHASE1_SUMMARY.md) 和 [docs/PHASE2_SUMMARY.md](docs/PHASE2_SUMMARY.md)；第三阶段记录见 [docs/PHASE3_PROGRESS.md](docs/PHASE3_PROGRESS.md)，详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+阶段总结见 [docs/PHASE1_SUMMARY.md](docs/PHASE1_SUMMARY.md) 和 [docs/PHASE2_SUMMARY.md](docs/PHASE2_SUMMARY.md)；第三阶段记录见 [docs/PHASE3_PROGRESS.md](docs/PHASE3_PROGRESS.md)，跨文档评测与比较功能记录见 [docs/PHASE4_PROGRESS.md](docs/PHASE4_PROGRESS.md)，详细计划见 [docs/ROADMAP.md](docs/ROADMAP.md)，系统边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 组委会样例回归结果见 [docs/OFFICIAL_ACCEPTANCE.md](docs/OFFICIAL_ACCEPTANCE.md)。

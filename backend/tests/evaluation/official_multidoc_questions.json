@@ -1,0 +1,87 @@
+{
+  "samples": [
+    "1706.03762v7.pdf",
+    "2103.00020v1.pdf",
+    "UnderstandingDeepLearning_02_09_26_C.pdf"
+  ],
+  "cases": [
+    {
+      "id": "clip01", "question": "How many image-text pairs did CLIP use for pretraining?",
+      "expected_sources": {"2103.00020v1.pdf": [1, 2, 3]},
+      "fact_groups": [["400 million"], ["image, text pairs", "image text pairs"], ["internet"]]
+    },
+    {
+      "id": "clip02", "question": "How does CLIP create a zero-shot classifier from class names?",
+      "expected_sources": {"2103.00020v1.pdf": [2]},
+      "fact_groups": [["text encoder"], ["class text", "text prompts", "label text"], ["image encoder"], ["similarity"]]
+    },
+    {
+      "id": "clip03", "question": "Which image-text pairs are matched and which are treated as negatives in CLIP contrastive pretraining?",
+      "expected_sources": {"2103.00020v1.pdf": [2, 4, 5]},
+      "fact_groups": [["matched image-text pairs", "correct pairings"], ["incorrect pairings", "N²−N"], ["cosine similarity"]]
+    },
+    {
+      "id": "clip04", "question": "How can prompt engineering improve CLIP zero-shot performance?",
+      "expected_sources": {"2103.00020v1.pdf": [8]},
+      "fact_groups": [["prompt text"], ["zero-shot performance"], ["customizing the prompt"]]
+    },
+    {
+      "id": "clip05", "question": "Which image encoder families did the CLIP authors experiment with?",
+      "expected_sources": {"2103.00020v1.pdf": [5]},
+      "fact_groups": [["ResNet"], ["Vision Transformer", "ViT"]]
+    },
+    {
+      "id": "clip06", "question": "Did CLIP require the 1.28 million ImageNet training examples for zero-shot evaluation?",
+      "expected_sources": {"2103.00020v1.pdf": [1]},
+      "fact_groups": [["without needing to use any of the 1.28 million training examples", "without using the training examples"], ["zero-shot"]]
+    },
+    {
+      "id": "book01", "question": "How does the book distinguish underfitting from overfitting?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [36]},
+      "fact_groups": [["cannot capture the true relationship", "not able to capture the true relationship"], ["statistical peculiarities", "noise"], ["test data"]]
+    },
+    {
+      "id": "book02", "question": "What does stochastic gradient descent add to the optimization process, and why can that help?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [97, 99]},
+      "fact_groups": [["adds noise", "noise to the optimization"], ["escape from the wrong valley", "escape"], ["global minimum"]]
+    },
+    {
+      "id": "book03", "question": "What does softmax do in multiclass classification?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [82, 83]},
+      "fact_groups": [["softmax"], ["sum to one", "sum to one"], ["categorical distribution", "probability"]]
+    },
+    {
+      "id": "book04", "question": "Why are convolutional networks suited to images compared with fully connected networks?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [175, 177]},
+      "fact_groups": [["nearby image pixels", "nearby pixels"], ["shared weights", "same weights"], ["local connectivity", "convolutional layers"]]
+    },
+    {
+      "id": "book05", "question": "How do residual connections help very deep networks train?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [215, 216]},
+      "fact_groups": [["propagating gradients", "gradients through many layers"], ["loss surface is smoother", "smoother"], ["vanishing gradients"]]
+    },
+    {
+      "id": "book06", "question": "How does Adam use estimates of gradients to update model parameters?",
+      "expected_sources": {"UnderstandingDeepLearning_02_09_26_C.pdf": [103, 104]},
+      "fact_groups": [["first moment", "mean of the gradients"], ["second moment", "squared gradients"], ["learning rate"]]
+    },
+    {
+      "id": "cross01",
+      "question": "Compare what Transformer dot-product attention computes from query and key vectors and what CLIP contrastive training aligns between image and text.",
+      "expected_sources": {"1706.03762v7.pdf": [3, 4], "2103.00020v1.pdf": [2, 4, 5]},
+      "fact_groups_by_source": {
+        "1706.03762v7.pdf": [["query", "queries"], ["key", "keys"], ["softmax"], ["values"]],
+        "2103.00020v1.pdf": [["image"], ["text"], ["embeddings"], ["contrastive"]]
+      }
+    },
+    {
+      "id": "cross02",
+      "question": "Compare the Transformer sequence model with CLIP: what does each model take as input and what does its attention or contrastive objective do?",
+      "expected_sources": {"1706.03762v7.pdf": [1, 2], "2103.00020v1.pdf": [1, 2]},
+      "fact_groups_by_source": {
+        "1706.03762v7.pdf": [["sequence transduction", "sequence"], ["attention mechanisms", "attention"]],
+        "2103.00020v1.pdf": [["image, text pairs", "image text pairs"], ["contrastive"], ["natural language supervision"]]
+      }
+    }
+  ]
+}

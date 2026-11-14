@@ -1950,6 +1950,113 @@ body.drawer-open .paper-drawer {
   padding: 0 12px;
 }
 
+.comparison-mode-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #dcdcf9;
+  border-radius: 10px;
+  background: var(--primary-pale);
+  color: var(--primary-strong);
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.comparison-mode-toggle:hover {
+  border-color: #c8c9f5;
+  background: #efefff;
+}
+
+.comparison-mode-toggle span {
+  font-size: 15px;
+  transition: transform 150ms ease;
+}
+
+.comparison-mode-toggle:hover span { transform: translateX(2px); }
+
+.comparison-paper-scope {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+}
+
+.comparison-paper-scope legend {
+  padding: 0 5px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.comparison-paper-scope > p {
+  margin: -4px 0 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.comparison-paper-list {
+  display: grid;
+  max-height: 220px;
+  gap: 5px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.comparison-paper-option {
+  display: flex !important;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 9px !important;
+  padding: 8px;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+.comparison-paper-option:hover { background: var(--surface-soft); }
+.comparison-paper-option.is-unavailable { opacity: .58; cursor: not-allowed; }
+
+.comparison-paper-option input {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+}
+
+.comparison-paper-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.comparison-paper-option strong,
+.comparison-paper-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-paper-option strong { color: var(--ink); font-size: 10px; }
+.comparison-paper-option small { color: var(--muted); font-size: 9px; font-weight: 500; }
+
+.comparison-paper-empty {
+  padding: 15px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
 .research-compose textarea:focus,
 .research-compose select:focus {
   border-color: rgb(91 92 226 / 55%);
@@ -1971,6 +2078,8 @@ body.drawer-open .paper-drawer {
   min-height: 43px;
   justify-content: center;
 }
+
+.research-actions #researchCompare { grid-column: 1 / -1; }
 
 .research-actions .secondary-button svg {
   width: 16px;

@@ -129,6 +129,138 @@ def test_chinese_question_can_answer_from_english_paper(client, monkeypatch):
     assert response.json()["citations"][0]["source"]["paper_id"] == paper["paper_id"]
 
 
+def test_compare_searches_each_paper_and_requires_citations_from_both(client, monkeypatch):
+    attention = upload(
+        client, "Attention Is All You Need",
+        "Scaled dot-product attention compares query vectors with key vectors and uses softmax weights to combine values.",
+    )
+    clip = upload(
+        client, "CLIP",
+        "CLIP contrastive pretraining aligns image and text embeddings. It compares the similarity of matched image-text pairs.",
+    )
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    observed = {}
+
+    def compare_answer(question, evidence, **kwargs):
+        observed["papers"] = {item.source.paper_id for item in evidence}
+        observed["mode"] = kwargs.get("answer_mode")
+        return "Transformer 注意力计算 query 与 key 的关系 [E1]；CLIP 对齐图像与文本嵌入 [E2]。"
+
+    monkeypatch.setattr(research, "generate_grounded_answer", compare_answer)
+    response = client.post(
+        "/api/research/compare",
+        json={
+            "question": "Compare attention using query and key vectors with CLIP contrastive image-text embeddings.",
+            "paper_ids": [attention["paper_id"], clip["paper_id"]],
+            "limit": 6,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "comparison"
+    assert payload["insufficient"] is False
+    assert observed["papers"] == {attention["paper_id"], clip["paper_id"]}
+    assert observed["mode"] == "comparison"
+    assert {item["source"]["paper_id"] for item in payload["citations"]} == observed["papers"]
+    assert [step["tool"] for step in payload["steps"]] == [
+        "intent_router", "tool_selector", "retrieve_evidence", "evidence_gate",
+        "generate_grounded_answer", "citation_validator",
+    ]
+
+
+def test_compare_stops_if_any_selected_paper_has_no_evidence(client, monkeypatch):
+    attention = upload(client, "Attention", "Attention compares query and key vectors to calculate weights.")
+    biology = upload(client, "Biology", "Proteins fold into stable structures through chemical interactions.")
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+
+    def unexpected_call(*args, **kwargs):
+        raise AssertionError("the model must not compare without evidence from every selected paper")
+
+    monkeypatch.setattr(research, "generate_grounded_answer", unexpected_call)
+    response = client.post(
+        "/api/research/compare",
+        json={
+            "question": "Compare attention query and key vectors across the selected papers",
+            "paper_ids": [attention["paper_id"], biology["paper_id"]],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["insufficient"] is True
+    assert payload["items"]
+    assert payload["steps"][-1]["tool"] == "evidence_gate"
+    assert payload["steps"][-1]["status"] == "skipped"
+
+
+def test_compare_requires_two_unique_papers(client):
+    paper = upload(client, "Attention", "Attention uses query and key vectors.")
+    second = upload(client, "CLIP", "CLIP compares image and text embeddings.")
+
+    one_paper = client.post(
+        "/api/research/compare",
+        json={"question": "Compare the methods", "paper_ids": [paper["paper_id"]]},
+    )
+    duplicate_paper = client.post(
+        "/api/research/compare",
+        json={"question": "Compare the methods", "paper_ids": [paper["paper_id"], paper["paper_id"]]},
+    )
+    too_few_evidence_items = client.post(
+        "/api/research/compare",
+        json={
+            "question": "Compare attention and image embeddings",
+            "paper_ids": [paper["paper_id"], second["paper_id"]],
+            "limit": 1,
+        },
+    )
+
+    assert one_paper.status_code == 422
+    assert duplicate_paper.status_code == 422
+    assert too_few_evidence_items.status_code == 422
+
+
+def test_agent_routes_selected_multi_paper_comparison_through_source_gates(client, monkeypatch):
+    first = upload(client, "Attention", "Attention compares query vectors with key vectors to compute weights.")
+    second = upload(client, "CLIP", "CLIP aligns image embeddings with text embeddings through contrastive training.")
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    monkeypatch.setattr(
+        research,
+        "generate_grounded_answer",
+        lambda *args, **kwargs: "Attention uses query and key [E1]; CLIP aligns image and text [E2].",
+    )
+
+    response = client.post(
+        "/api/research/agent",
+        json={
+            "question": "Compare how attention computes query and key weights with CLIP contrastive image and text embeddings",
+            "paper_ids": [first["paper_id"], second["paper_id"]],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "comparison"
+    assert {item["source"]["paper_id"] for item in payload["citations"]} == {
+        first["paper_id"], second["paper_id"],
+    }
+
+
+def test_compare_rejects_answer_that_does_not_cite_each_selected_paper(client, monkeypatch):
+    attention = upload(client, "Attention", "Attention compares query vectors with key vectors.")
+    clip = upload(client, "CLIP", "CLIP aligns image and text embeddings through contrastive pretraining.")
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    monkeypatch.setattr(research, "generate_grounded_answer", lambda *args, **kwargs: "Attention compares query and key vectors [E1].")
+
+    response = client.post(
+        "/api/research/compare",
+        json={"question": "Compare query-key attention and image-text alignment", "paper_ids": [attention["paper_id"], clip["paper_id"]]},
+    )
+
+    assert response.status_code == 502
+    assert "每一篇所选论文" in response.json()["detail"]
+
+
 def test_answer_rejects_model_output_without_valid_citation(client, monkeypatch):
     upload(client, "Attention", "Attention uses query and key vectors to compute weights.")
     monkeypatch.setattr(client.app.state, "settings", configured_settings())

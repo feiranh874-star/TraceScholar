@@ -25,7 +25,7 @@ ANSWER_MODES = {
     "definition": "Define the key concept first, then explain its role using only the cited evidence.",
     "method": "Explain the method as a short ordered sequence and state what each step does. If the evidence describes a main mechanism together with a companion condition or safeguard, include both.",
     "result": "Extract reported metrics with their task or dataset context; never infer missing numbers.",
-    "comparison": "Compare only attributes supported by the retrieved sources and cite each side. If evidence does not cover multiple sources, say so clearly.",
+    "comparison": "Organize the comparison by supported aspects such as research goal, method, data, or results. Name each paper when stating its findings and cite each side. Use evidence from every selected paper; if a selected paper does not support an aspect, say that the source does not report it instead of guessing.",
     "summary": "Summarize the central claim and supporting method or result in up to three concise points.",
     "general": "Answer the question directly and concisely.",
 }

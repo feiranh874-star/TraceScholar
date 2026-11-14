@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=3" />
+    <link rel="stylesheet" href="/assets/app.css?v=5" />
   </head>
   <body>
     <div class="app-shell">
@@ -25,8 +25,8 @@
           <button class="nav-item" data-view="research"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5M8 9h5M8 12h3"/></svg></span>证据检索</button>
         </nav>
 
-        <div class="nav-section-label">即将开放</div>
-        <div class="disabled-nav"><span><i></i>多篇对比</span><span><i></i>研究图谱</span></div>
+        <div class="nav-section-label">研究工具</div>
+        <div class="disabled-nav"><span><i></i>研究图谱 · 规划中</span></div>
 
         <div class="sidebar-footer">
           <div class="api-state" id="apiState"><span class="status-dot is-checking"></span><div><strong>正在连接</strong><small>科研资料服务</small></div></div>
@@ -80,8 +80,14 @@
               <section class="panel research-compose">
                 <form id="researchForm">
                   <label for="researchQuestion"><span>研究问题</span><textarea id="researchQuestion" rows="7" minlength="2" maxlength="500" placeholder="例如：Transformer 如何使用 Query、Key 和 Value 计算注意力？" required></textarea></label>
-                  <label for="researchPaperScope"><span>检索范围</span><select id="researchPaperScope"><option value="">全部已入库论文</option></select></label>
-                  <div class="research-actions"><button class="secondary-button" id="researchSubmit" type="submit"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span>只检索原文</span></button><button class="primary-button" id="researchAnswer" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg><span>智能体回答</span></button></div>
+                  <label id="singlePaperScopeLabel" for="researchPaperScope"><span>单篇检索范围</span><select id="researchPaperScope"><option value="">全部已入库论文</option></select></label>
+                  <button class="comparison-mode-toggle" id="comparisonModeToggle" type="button">切换到多篇比较 <span>→</span></button>
+                  <fieldset class="comparison-paper-scope is-hidden" id="comparisonPaperScope">
+                    <legend>选择要比较的论文</legend>
+                    <p>至少选择 2 篇，最多选择 5 篇。比较前会分别从每篇论文检索证据。</p>
+                    <div class="comparison-paper-list" id="comparisonPaperList"></div>
+                  </fieldset>
+                  <div class="research-actions"><button class="secondary-button" id="researchSubmit" type="submit"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span>只检索原文</span></button><button class="primary-button" id="researchAnswer" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg><span>智能体回答</span></button><button class="primary-button is-hidden" id="researchCompare" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h7v14H4zM13 5h7v14h-7z"/><path d="M7 9h1M7 13h1M16 9h1M16 13h1"/></svg><span>比较所选论文</span></button></div>
                 </form>
                 <div class="research-note"><strong>调用说明</strong><span>“只检索原文”不产生模型费用；“智能体回答”先检索并检查证据，需要生成解释时才调用 DeepSeek。</span></div>
               </section>
@@ -106,6 +112,6 @@
 
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/assets/app.js?v=4" defer></script>
+    <script src="/assets/app.js?v=5" defer></script>
   </body>
 </html>

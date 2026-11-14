@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SourceIdentifiers(BaseModel):
@@ -64,6 +64,21 @@ class RetrievalRequest(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     paper_ids: list[str] = Field(default_factory=list, max_length=50)
     limit: int = Field(default=6, ge=1, le=12)
+
+
+class ComparisonRequest(BaseModel):
+    """A comparison must explicitly name at least two papers."""
+
+    question: str = Field(min_length=2, max_length=500)
+    paper_ids: list[str] = Field(min_length=2, max_length=5)
+    limit: int = Field(default=10, ge=2, le=15)
+
+    @field_validator("paper_ids")
+    @classmethod
+    def paper_ids_must_be_unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("paper_ids must be unique")
+        return value
 
 
 class RetrievalEvidenceRecord(EvidenceRecord):

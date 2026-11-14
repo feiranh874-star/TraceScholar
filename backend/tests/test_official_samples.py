@@ -9,6 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import papers
+from app import research
+from app.config import Settings
 from app.main import app
 
 
@@ -137,4 +139,102 @@ def test_official_bilingual_retrieval_benchmark(client):
     assert agent_response.status_code == 200
     assert agent_response.json()["route"] == "retrieve_only"
     assert agent_response.json()["items"]
+
+
+def test_official_multidocument_retrieval_and_comparison(client, monkeypatch):
+    dataset_path = Path(__file__).parent / "evaluation" / "official_multidoc_questions.json"
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    paper_ids = {}
+    for filename in dataset["samples"]:
+        response = upload_sample(client, filename)
+        assert response.status_code == 201
+        paper_ids[filename] = response.json()["paper_id"]
+
+    monkeypatch.setattr(client.app.state, "settings", Settings(
+        llm_provider="deepseek",
+        llm_base_url="https://api.deepseek.com",
+        llm_api_key="test-only-key",
+        llm_model="deepseek-flash",
+    ))
+
+    def mocked_comparison(_question, evidence, **_kwargs):
+        citations = [f"[E{index}]" for index in range(1, len(evidence) + 1)]
+        return "所选来源的原文信息分别如下。" + " ".join(citations)
+
+    monkeypatch.setattr(research, "generate_grounded_answer", mocked_comparison)
+    page_hits = []
+    global_page_hits = []
+    fact_coverage = []
+    comparison_source_checks = []
+    page_misses = []
+
+    def normalize(value: str) -> str:
+        return re.sub(r"[^a-z0-9\u3400-\u9fff]+", "", value.casefold())
+
+    for case in dataset["cases"]:
+        expected_sources = case["expected_sources"]
+        source_ids = [paper_ids[filename] for filename in expected_sources]
+        is_comparison = case["id"].startswith("cross")
+        if is_comparison:
+            response = client.post(
+                "/api/research/compare",
+                json={"question": case["question"], "paper_ids": source_ids, "limit": 10},
+            )
+        else:
+            response = client.post(
+                "/api/research/retrieve",
+                json={"question": case["question"], "paper_ids": source_ids, "limit": 6},
+            )
+        assert response.status_code == 200, f"{case['id']}: {response.text}"
+        payload = response.json()
+        items = payload["items"]
+        if is_comparison:
+            assert payload["insufficient"] is False
+            cited_papers = {item["source"]["paper_id"] for item in payload["citations"]}
+            comparison_source_checks.append(set(source_ids).issubset(cited_papers))
+        else:
+            global_response = client.post(
+                "/api/research/retrieve",
+                json={"question": case["question"], "paper_ids": [], "limit": 6},
+            )
+            assert global_response.status_code == 200, f"{case['id']}: {global_response.text}"
+            global_items = global_response.json()["items"]
+            filename, expected_pages = next(iter(expected_sources.items()))
+            expected_id = paper_ids[filename]
+            global_source_items = [item for item in global_items if item["source"]["paper_id"] == expected_id]
+            global_page_hits.append(any(
+                item["source"]["page_start"] <= page <= item["source"]["page_end"]
+                for item in global_source_items
+                for page in expected_pages
+            ))
+
+        for filename, expected_pages in expected_sources.items():
+            expected_id = paper_ids[filename]
+            source_items = [item for item in items if item["source"]["paper_id"] == expected_id]
+            page_hit = any(
+                item["source"]["page_start"] <= page <= item["source"]["page_end"]
+                for item in source_items[:6]
+                for page in expected_pages
+            )
+            page_hits.append(page_hit)
+            if not page_hit:
+                page_misses.append((case["id"], filename, expected_pages))
+            groups = case.get("fact_groups_by_source", {}).get(filename)
+            if groups is None and len(expected_sources) == 1:
+                groups = case.get("fact_groups", [])
+            if groups:
+                evidence = normalize(" ".join(item["text"] for item in source_items[:6]))
+                supported = sum(
+                    any(normalize(phrase) in evidence for phrase in alternatives)
+                    for alternatives in groups
+                )
+                fact_coverage.append(supported / len(groups))
+
+    page_recall = sum(page_hits) / max(1, len(page_hits))
+    global_page_recall = sum(global_page_hits) / max(1, len(global_page_hits))
+    mean_fact_coverage = sum(fact_coverage) / max(1, len(fact_coverage))
+    assert page_recall >= 0.80, f"paper-scoped official page recall@6 was {page_recall:.0%}; misses={page_misses}"
+    assert global_page_recall >= 0.50, f"all-library page recall@6 was {global_page_recall:.0%}"
+    assert mean_fact_coverage >= 0.70, f"official corpus evidence fact coverage@6 was {mean_fact_coverage:.0%}"
+    assert comparison_source_checks and all(comparison_source_checks)
 

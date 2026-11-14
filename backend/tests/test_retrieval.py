@@ -85,6 +85,26 @@ def test_retrieval_rejects_unknown_ranker(client):
         search_evidence("attention query keys", ranker="neural")
 
 
+def test_comparison_retrieval_diversifies_across_papers(client):
+    first = upload(
+        client, "Attention Study",
+        "Attention compares queries and keys to calculate weights. Attention combines value vectors using those weights. " * 3,
+    )
+    second = upload(
+        client, "Attention Extension",
+        "Attention compares queries and keys to calculate weights in a different network. "
+        "Attention uses the resulting weights to aggregate values. " * 3,
+    )
+
+    items, _ = search_evidence(
+        "How does attention compare queries and keys?",
+        limit=2,
+        diversify_by_work=True,
+    )
+
+    assert {item.source.paper_id for item in items} == {first["paper_id"], second["paper_id"]}
+
+
 def test_retrieval_can_limit_search_to_selected_paper(client):
     first = upload(client, "First", "Evidence about transformers and attention heads in neural networks.")
     second = upload(client, "Second", "Different evidence about transformers and attention heads in a later study.")

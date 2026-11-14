@@ -19,6 +19,8 @@ def test_home_serves_chinese_workspace():
     assert "answerResult" in response.text
     assert "查看助手执行步骤" in response.text
     assert "智能体回答" in response.text
+    assert "多篇比较" in response.text
+    assert "researchCompare" in response.text
 
 
 def test_frontend_assets_are_available():
@@ -43,6 +45,7 @@ def test_developer_docs_remain_available():
     assert "/api/research/retrieve" in openapi.json()["paths"]
     assert "/api/research/answer" in openapi.json()["paths"]
     assert "/api/research/agent" in openapi.json()["paths"]
+    assert "/api/research/compare" in openapi.json()["paths"]
 
 
 def test_unknown_api_path_keeps_json_404():

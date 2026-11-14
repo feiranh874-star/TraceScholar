@@ -11,10 +11,12 @@ from app.models import (
     AgentStepRecord,
     AnswerCitationRecord,
     AnswerResponse,
+    ComparisonRequest,
     RetrievalEvidenceRecord,
     RetrievalRequest,
     RetrievalResponse,
 )
+from app import papers as paper_store
 from app.retrieval import search_evidence
 
 
@@ -71,6 +73,7 @@ def _answer_with_evidence(
     total_candidates: int,
     settings: Settings,
     answer_mode: str = "general",
+    required_paper_ids: set[str] | None = None,
 ) -> AnswerResponse:
     if not all((settings.llm_base_url, settings.llm_api_key, settings.llm_model)):
         raise HTTPException(
@@ -103,6 +106,13 @@ def _answer_with_evidence(
         for index, item in enumerate(items, start=1)
         if index in valid_references
     ]
+    if required_paper_ids:
+        cited_papers = {citation.source.paper_id for citation in citations}
+        if not required_paper_ids.issubset(cited_papers) and answer.strip().rstrip("。") != "当前资料不足":
+            raise HTTPException(
+                status_code=502,
+                detail="比较回答没有引用每一篇所选论文的证据，请重试。",
+            )
     insufficient = answer.strip().rstrip("。") == "当前资料不足"
     if not insufficient and not citations:
         raise HTTPException(status_code=502, detail="DeepSeek 回答未包含有效证据引用，请重试。")
@@ -126,6 +136,7 @@ def retrieve_evidence(request: RetrievalRequest) -> RetrievalResponse:
         request.question,
         paper_ids=request.paper_ids,
         limit=request.limit,
+        diversify_by_work=not request.paper_ids,
     )
     return RetrievalResponse(
         question=request.question,
@@ -142,6 +153,7 @@ def answer_from_evidence(request: RetrievalRequest, http_request: Request) -> An
         request.question,
         paper_ids=request.paper_ids,
         limit=request.limit,
+        diversify_by_work=not request.paper_ids,
     )
     if not items:
         return AnswerResponse(
@@ -158,6 +170,19 @@ def research_agent(request: RetrievalRequest, http_request: Request) -> AgentRes
     """Route evidence-only questions or run the grounded-answer tool sequence."""
 
     intent = _classify_intent(request.question)
+    if intent == "comparison" and len(request.paper_ids) > 1:
+        if len(request.paper_ids) > 5:
+            raise HTTPException(status_code=422, detail="一次最多比较 5 篇论文。")
+        if len(set(request.paper_ids)) != len(request.paper_ids):
+            raise HTTPException(status_code=422, detail="比较论文不能重复选择。")
+        return compare_papers(
+            ComparisonRequest(
+                question=request.question,
+                paper_ids=request.paper_ids,
+                limit=max(2, request.limit),
+            ),
+            http_request,
+        )
     retrieve_only = _wants_evidence_only(request.question)
     route = "retrieve_only" if retrieve_only else "grounded_answer"
     steps = [
@@ -181,6 +206,7 @@ def research_agent(request: RetrievalRequest, http_request: Request) -> AgentRes
         retrieval_question,
         paper_ids=request.paper_ids,
         limit=request.limit,
+        diversify_by_work=not request.paper_ids,
     )
     steps.append(AgentStepRecord(
         tool="retrieve_evidence",
@@ -255,6 +281,121 @@ def research_agent(request: RetrievalRequest, http_request: Request) -> AgentRes
     return AgentResponse(
         **answer_response.model_dump(),
         intent=intent,
+        route="grounded_answer",
+        steps=steps,
+    )
+
+
+@router.post("/compare", response_model=AgentResponse)
+def compare_papers(request: ComparisonRequest, http_request: Request) -> AgentResponse:
+    """Retrieve evidence from every selected paper before generating a comparison."""
+
+    metadata_by_id = {
+        item["paper_id"]: item
+        for item in paper_store._all_metadata()
+    }
+    missing_papers = [paper_id for paper_id in request.paper_ids if paper_id not in metadata_by_id]
+    if missing_papers:
+        raise HTTPException(status_code=404, detail="所选论文不存在，请刷新论文库后重试。")
+
+    count = len(request.paper_ids)
+    if request.limit < count:
+        raise HTTPException(status_code=422, detail="证据条数至少要覆盖每一篇所选论文。")
+    base_limit, remainder = divmod(request.limit, count)
+    per_paper: list[list[RetrievalEvidenceRecord]] = []
+    total_candidates = 0
+    for index, paper_id in enumerate(request.paper_ids):
+        paper_limit = max(1, base_limit + (1 if index < remainder else 0))
+        evidence, candidate_count = search_evidence(
+            request.question,
+            paper_ids=[paper_id],
+            limit=paper_limit,
+            relax_query_coverage=True,
+        )
+        per_paper.append(evidence)
+        total_candidates += candidate_count
+
+    # Interleave sources so one paper does not dominate the prompt or the UI.
+    items = [
+        group[index]
+        for index in range(max((len(group) for group in per_paper), default=0))
+        for group in per_paper
+        if index < len(group)
+    ]
+    covered_papers = {
+        evidence.source.paper_id
+        for group in per_paper
+        for evidence in group
+    }
+    steps = [
+        AgentStepRecord(
+            tool="intent_router",
+            status="done",
+            detail="识别为多论文比较问题。",
+        ),
+        AgentStepRecord(
+            tool="tool_selector",
+            status="done",
+            detail=f"分别检索用户选择的 {count} 篇论文，避免单篇文献挤占全部证据。",
+        ),
+        AgentStepRecord(
+            tool="retrieve_evidence",
+            status="done",
+            detail="；".join(
+                f"{metadata_by_id[paper_id].get('title') or metadata_by_id[paper_id]['filename']}：{len(evidence)} 条"
+                for paper_id, evidence in zip(request.paper_ids, per_paper)
+            ),
+        ),
+    ]
+    if len(covered_papers) != count:
+        steps.append(AgentStepRecord(
+            tool="evidence_gate",
+            status="skipped",
+            detail="至少一篇所选论文没有找到可用证据，停止生成，避免把缺失来源误写成对比结论。",
+        ))
+        return AgentResponse(
+            question=request.question,
+            insufficient=True,
+            items=items,
+            total_candidates=total_candidates,
+            intent="comparison",
+            route="grounded_answer",
+            steps=steps,
+        )
+
+    steps.append(AgentStepRecord(
+        tool="evidence_gate",
+        status="done",
+        detail=f"所有 {count} 篇所选论文均有原文片段和有效页码。",
+    ))
+    answer_response = _answer_with_evidence(
+        request.question,
+        items,
+        total_candidates,
+        http_request.app.state.settings,
+        answer_mode="comparison",
+        required_paper_ids=set(request.paper_ids),
+    )
+    steps.extend([
+        AgentStepRecord(
+            tool="generate_grounded_answer",
+            status="done",
+            detail="模型已根据各篇论文的独立证据生成比较回答。" if not answer_response.insufficient else "模型判断现有证据不足。",
+        ),
+        AgentStepRecord(
+            tool="citation_validator",
+            status="done" if answer_response.insufficient or answer_response.citations else "skipped",
+            detail=(
+                f"保留 {len(answer_response.citations)} 条有效引用，引用均映射到所选论文。"
+                if answer_response.citations
+                else "模型判断证据不足，没有给出结论。" if answer_response.insufficient
+                else "没有有效引用，因此拒绝展示无引用回答。"
+            ),
+        ),
+    ])
+    return AgentResponse(
+        **answer_response.model_dump(),
+        intent="comparison",
         route="grounded_answer",
         steps=steps,
     )

@@ -16,9 +16,10 @@ from app.processing import build_chunks
 WORD_PATTERN = re.compile(r"[a-z0-9]+(?:[-_][a-z0-9]+)*")
 CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
 STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-    "did", "do", "does", "how", "in", "is", "it", "of", "on", "or", "that", "the", "this",
-    "to", "what", "which", "with", "why", "main", "each", "make", "up", "change", "components",
+    "a", "an", "and", "are", "as", "at", "be", "been", "being", "by", "for", "from",
+    "did", "do", "does", "doing", "how", "in", "into", "is", "it", "its", "of", "on", "or",
+    "that", "the", "their", "this", "to", "was", "were", "what", "which", "with", "why",
+    "main", "each", "make", "up", "change", "components", "many", "used", "use",
     "了", "和", "是", "的", "在", "主要", "哪些", "什么", "怎么", "如何",
 }
 
@@ -32,6 +33,12 @@ ENGLISH_ALIASES = {
     "combines": "concatenate", "combined": "concatenate", "combining": "concatenate",
     "combine": "concatenate", "concatenates": "concatenate", "concatenated": "concatenate",
     "functions": "function", "encodings": "encoding", "mechanisms": "mechanism",
+    "pairs": "pair", "pairings": "pair", "pairing": "pair",
+    "images": "image", "encoders": "encoder",
+    "representations": "representation", "classifiers": "classifier",
+    "labels": "label", "examples": "example", "embeddings": "embedding",
+    "pre-training": "pretrain", "pre-trained": "pretrain", "pretraining": "pretrain",
+    "pretrained": "pretrain", "matched": "match", "matching": "match",
 }
 
 # Offline terminology bridge for the initial research-paper demo. This is not
@@ -64,11 +71,13 @@ def tokenize(value: str) -> list[str]:
     """Tokenize English words and Chinese unigrams/bigrams without dependencies."""
 
     normalized = _normalize(value)
-    tokens = [
-        ENGLISH_ALIASES.get(token, token)
-        for token in WORD_PATTERN.findall(normalized)
-        if token not in STOPWORDS
-    ]
+    tokens = []
+    for token in WORD_PATTERN.findall(normalized):
+        canonical = ENGLISH_ALIASES.get(token, token)
+        if token not in STOPWORDS:
+            tokens.append(canonical)
+        if "-" in canonical:
+            tokens.extend(part for part in canonical.split("-") if part not in STOPWORDS)
     for run in CJK_PATTERN.findall(normalized):
         characters = [character for character in run if character not in STOPWORDS]
         tokens.extend(characters)
@@ -170,6 +179,8 @@ def search_evidence(
     paper_ids: list[str] | None = None,
     limit: int = 6,
     ranker: str = "bm25",
+    diversify_by_work: bool = False,
+    relax_query_coverage: bool = False,
 ) -> tuple[list[RetrievalEvidenceRecord], int]:
     """Rank local chunks with the selected lexical/vector ranking strategy."""
 
@@ -239,7 +250,9 @@ def search_evidence(
             if not matched:
                 continue
             coverage = matched / max(1, len(query_counts))
-            if len(query_counts) >= 3 and (matched < 2 or coverage < 0.5):
+            if len(query_counts) >= 3 and (
+                matched < 2 or (coverage < 0.5 and not relax_query_coverage)
+            ):
                 continue
             if "legacy" in active_rankers:
                 scores["legacy"].append(legacy_score * (0.65 + coverage))
@@ -300,6 +313,25 @@ def search_evidence(
             ),
         )
         ranked = [(raw_scores[mode][identifier] + boosts[identifier], candidate_by_id[identifier]) for identifier in ordered_ids]
+
+    if diversify_by_work:
+        work_groups: dict[str, list[tuple[float, dict[str, Any]]]] = {}
+        for score, candidate in ranked:
+            work_id = str(candidate["metadata"].get("work_id") or candidate["metadata"]["paper_id"])
+            work_groups.setdefault(work_id, []).append((score, candidate))
+        diversified: list[tuple[float, dict[str, Any]]] = []
+        while len(diversified) < limit and work_groups:
+            exhausted = []
+            for work_id, group in work_groups.items():
+                if group:
+                    diversified.append(group.pop(0))
+                    if len(diversified) >= limit:
+                        break
+                if not group:
+                    exhausted.append(work_id)
+            for work_id in exhausted:
+                work_groups.pop(work_id, None)
+        ranked = diversified
 
     results: list[RetrievalEvidenceRecord] = []
     for score, candidate in ranked[:limit]:
