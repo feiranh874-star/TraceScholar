@@ -169,6 +169,52 @@ def test_compare_searches_each_paper_and_requires_citations_from_both(client, mo
     ]
 
 
+def test_chinese_training_objective_comparison_retrieves_source_aligned_passages(client, monkeypatch):
+    clip = upload(
+        client,
+        "Learning Transferable Visual Models From Natural Language Supervision",
+        "CLIP uses contrastive image-text pretraining to identify matching image and text pairs. "
+        "This objective supports zero-shot transfer to downstream datasets.",
+    )
+    gpt3 = upload(
+        client,
+        "Language Models are Few-Shot Learners",
+        "GPT-3 is an autoregressive language model trained to predict the next word. "
+        "It demonstrates few-shot in-context learning without gradient updates or fine-tuning.",
+    )
+    monkeypatch.setattr(client.app.state, "settings", configured_settings())
+    original_search = research.search_evidence
+    observed_queries = []
+
+    def capture_search(question, **kwargs):
+        observed_queries.append(question)
+        return original_search(question, **kwargs)
+
+    monkeypatch.setattr(research, "search_evidence", capture_search)
+    monkeypatch.setattr(
+        research,
+        "generate_grounded_answer",
+        lambda *args, **kwargs: "CLIP uses contrastive image-text pretraining [E1]; GPT-3 uses autoregressive language modeling [E2].",
+    )
+
+    response = client.post(
+        "/api/research/compare",
+        json={
+            "question": "分别用一句话说明 CLIP 和 GPT-3 的预训练目标，并为每篇论文各引用一条原文证据。",
+            "paper_ids": [clip["paper_id"], gpt3["paper_id"]],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["insufficient"] is False
+    assert [item["source"]["paper_id"] for item in payload["citations"]] == [
+        clip["paper_id"], gpt3["paper_id"],
+    ]
+    assert "contrastive image text pretraining objective" in observed_queries[0]
+    assert "GPT-3 autoregressive language model objective" in observed_queries[1]
+
+
 def test_compare_stops_if_any_selected_paper_has_no_evidence(client, monkeypatch):
     attention = upload(client, "Attention", "Attention compares query and key vectors to calculate weights.")
     biology = upload(client, "Biology", "Proteins fold into stable structures through chemical interactions.")

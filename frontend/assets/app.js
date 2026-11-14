@@ -464,7 +464,10 @@
     `).join("");
     elements.agentTrace.hidden = steps.length === 0;
     if (payload.insufficient) {
-      elements.answerResult.innerHTML = '<div class="answer-insufficient"><strong>当前资料不足</strong><span>未调用模型补写缺失结论，请先导入更相关的论文或调整问题。</span></div>';
+      const detail = payload.model
+        ? "模型判断当前检索到的证据不足以支持结论。请展开下方原文片段，确认问题和证据对应后再调整问题。"
+        : "至少一篇所选论文没有找到可用证据，因此未调用模型。请导入相关论文或调整问题。";
+      elements.answerResult.innerHTML = `<div class="answer-insufficient"><strong>当前资料不足</strong><span>${detail}</span></div>`;
       elements.answerCitations.innerHTML = "";
       return;
     }
