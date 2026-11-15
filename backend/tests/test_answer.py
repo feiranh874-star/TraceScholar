@@ -555,5 +555,13 @@ def test_grounded_prompt_selects_intent_specific_answer_style():
     assert "short ordered sequence" in messages[0]["content"]
 
 
+def test_comparison_prompt_limits_answer_to_requested_scope():
+    messages = build_grounded_messages("Compare the methods only.", [], answer_mode="comparison")
+    prompt = messages[0]["content"]
+    assert "Answer only the comparison dimensions explicitly requested" in prompt
+    assert "under 350 Chinese characters or 180 English words" in prompt
+    assert "Do not add unrelated results, background, or a general conclusion" in prompt
+
+
 def test_answer_endpoint_is_in_openapi(client):
     assert "/api/research/answer" in client.get("/openapi.json").json()["paths"]

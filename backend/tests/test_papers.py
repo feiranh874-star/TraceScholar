@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app import papers
 from app.main import app
+from app.processing import extract_sections
 
 
 @pytest.fixture
@@ -117,6 +118,45 @@ def test_structure_and_chunks_preserve_evidence_source(client):
     assert source["work_id"] == paper["work_id"]
     assert source["version_label"] == "v2"
     assert source["page_start"] == 1
+
+
+def test_section_extraction_does_not_treat_running_page_number_as_heading():
+    sections = extract_sections([
+        {
+            "page": 4,
+            "text": (
+                "Learning Transferable Visual Models From Natural Language Supervision\n"
+                "4\n"
+                "balance the results by including up to 20,000 (image, text)\n"
+                "pairs per query.\n"
+                "2.3 Selecting an Efficient Pre-Training Method\n"
+                "The actual section content begins here."
+            ),
+        },
+    ])
+
+    titles = {section["title"] for section in sections}
+    assert "balance the results by including up to 20,000 (image, text)" not in titles
+    assert "Selecting an Efficient Pre-Training Method" in titles
+
+
+def test_section_number_matching_pdf_page_number_is_kept_when_followed_by_heading():
+    sections = extract_sections([
+        {"page": 1, "text": "1\nIntroduction\nThe paper begins with an introduction."},
+    ])
+
+    assert any(section["number"] == "1" and section["title"] == "Introduction" for section in sections)
+
+
+def test_section_extraction_skips_contents_pages_and_accepts_trailing_number_period():
+    sections = extract_sections([
+        {"page": 2, "text": "Contents\n1\nIntroduction\n3\n2\nApproach\n6"},
+        {"page": 4, "text": "2.3. Selecting an Efficient Pre-Training Method\nSection text."},
+    ])
+
+    assert [(item["number"], item["title"]) for item in sections] == [
+        ("2.3", "Selecting an Efficient Pre-Training Method"),
+    ]
 
 
 def test_non_pdf_and_corrupt_pdf_are_rejected_without_persisting(client):

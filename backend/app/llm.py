@@ -25,13 +25,13 @@ ANSWER_MODES = {
     "definition": "Define the key concept first, then explain its role using only the cited evidence.",
     "method": "Explain the method as a short ordered sequence and state what each step does. If the evidence describes a main mechanism together with a companion condition or safeguard, include both.",
     "result": "Extract reported metrics with their task or dataset context; never infer missing numbers.",
-    "comparison": "Organize the comparison by supported aspects such as research goal, method, data, or results. Name each paper when stating its findings and cite each side. Use evidence from every selected paper; if a selected paper does not support an aspect, say that the source does not report it instead of guessing.",
+    "comparison": "Answer only the comparison dimensions explicitly requested. Use at most three short aspects and no more than two concise sentences per aspect; keep the answer under 350 Chinese characters or 180 English words, excluding citations. Name each paper when stating its findings and cite each side. Do not add unrelated results, background, or a general conclusion. If a selected paper does not support a requested point, say the source does not report it instead of guessing.",
     "summary": "Summarize the central claim and supporting method or result in up to three concise points.",
     "general": "Answer the question directly and concisely.",
 }
 
 DEFAULT_MAX_TOKENS = 800
-COMPARISON_MAX_TOKENS = 4000
+COMPARISON_MAX_TOKENS = 2000
 
 
 def build_grounded_messages(
@@ -72,7 +72,7 @@ def build_grounded_messages(
                 "words when relevant; do not reproduce equations, raw LaTeX, or standalone formula blocks. "
                 "For example, describe what quantities are compared or combined instead of writing symbols."
                 " Never use Markdown or HTML tables. Use short paragraphs or bullets instead. "
-                "For comparisons, organize the answer by a few aspects, name each paper, and keep it concise."
+                "For comparisons, follow the requested scope and length limit strictly. Never expand into unrelated aspects."
                 f" Task focus: {ANSWER_MODES.get(answer_mode, ANSWER_MODES['general'])}"
             ),
         },

@@ -20,8 +20,8 @@ from app.models import (
 
 ARXIV_PATTERN = re.compile(r"(?<!\d)(?P<identifier>\d{4}\.\d{4,5})(?:v(?P<version>\d+))?", re.IGNORECASE)
 DOI_PATTERN = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
-SECTION_NUMBER_PATTERN = re.compile(r"^(?P<number>[1-9]\d*(?:\.\d+)*)$")
-SECTION_INLINE_PATTERN = re.compile(r"^(?P<number>[1-9]\d*(?:\.\d+)*)\s+(?P<title>[A-Z][^\n]{1,100})$")
+SECTION_NUMBER_PATTERN = re.compile(r"^(?P<number>[1-9]\d*(?:\.\d+)*)\.?$")
+SECTION_INLINE_PATTERN = re.compile(r"^(?P<number>[1-9]\d*(?:\.\d+)*)\.?\s+(?P<title>[A-Z][^\n]{1,100})$")
 COMMON_UNNUMBERED_SECTIONS = {"abstract", "references", "appendix", "acknowledgements", "acknowledgments"}
 AFFILIATION_WORDS = {
     "academy",
@@ -163,18 +163,34 @@ def extract_abstract(first_page_text: str) -> str | None:
     return body or None
 
 
-def _valid_section_title(value: str) -> bool:
+def is_valid_section_title(value: str) -> bool:
     value = value.strip()
-    if not 2 <= len(value) <= 100 or value.endswith(('.', ',', ';', ':')):
+    if not 2 <= len(value) <= 100 or value.endswith((".", ",", ";", ":", "-", "–", "—")):
         return False
     if len(value.split()) > 14 or "@" in value:
         return False
-    return value[0].isalpha() and sum(character.isalpha() for character in value) >= 2
+    if not value[0].isalpha() or sum(character.isalpha() for character in value) < 2:
+        return False
+    if value[0].isascii() and not value[0].isupper():
+        return False
+    words = re.findall(r"[A-Za-z]+", value)
+    if len(words) >= 6 and sum(word[0].isupper() for word in words) / len(words) < 0.45:
+        return False
+    if "%" in value or "\u00b7" in value or "\u2022" in value:
+        return False
+    return True
 
 
 def _valid_section_number(value: str) -> bool:
     parts = [int(part) for part in value.split(".")]
     return 1 <= parts[0] <= 20 and all(0 <= part <= 20 for part in parts[1:])
+
+
+def _looks_like_running_header(value: str) -> bool:
+    words = re.findall(r"[A-Za-z]+", value)
+    if len(words) < 5:
+        return False
+    return sum(word[0].isupper() for word in words) / len(words) >= 0.7
 
 
 def extract_sections(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -193,6 +209,9 @@ def extract_sections(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             lines.append((line, position))
             cursor = position + len(line) + 1
 
+        if any(line.casefold() in {"contents", "table of contents"} for line, _ in lines[:8]):
+            continue
+
         for index, (line, line_position) in enumerate(lines):
             number: str | None = None
             title: str | None = None
@@ -200,16 +219,37 @@ def extract_sections(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             inline_match = SECTION_INLINE_PATTERN.fullmatch(line)
             if (
                 number_match
+                and number_match.group("number") == str(page["page"])
+                and (
+                    (
+                        index == 0
+                        and not (
+                            index + 1 < len(lines)
+                            and is_valid_section_title(lines[index + 1][0])
+                        )
+                    )
+                    or index == len(lines) - 1
+                    or (
+                        0 < index <= 2
+                        and _looks_like_running_header(lines[index - 1][0])
+                    )
+                )
+            ):
+                # Running page numbers often sit directly before body text and
+                # otherwise look like a numbered heading in extracted PDF text.
+                continue
+            if (
+                number_match
                 and _valid_section_number(number_match.group("number"))
                 and index + 1 < len(lines)
-                and _valid_section_title(lines[index + 1][0])
+                and is_valid_section_title(lines[index + 1][0])
             ):
                 number = number_match.group("number")
                 title = lines[index + 1][0]
             elif (
                 inline_match
                 and _valid_section_number(inline_match.group("number"))
-                and _valid_section_title(inline_match.group("title"))
+                and is_valid_section_title(inline_match.group("title"))
             ):
                 number = inline_match.group("number")
                 title = inline_match.group("title")

@@ -10,7 +10,7 @@ from typing import Any
 
 from app import papers as paper_store
 from app.models import RetrievalEvidenceRecord, SourceReference
-from app.processing import build_chunks
+from app.processing import build_chunks, is_valid_section_title
 
 
 WORD_PATTERN = re.compile(r"[a-z0-9]+(?:[-_][a-z0-9]+)*")
@@ -155,6 +155,7 @@ def _load_candidates(paper_ids: set[str]) -> list[dict[str, Any]]:
         section_titles = {
             section.get("section_id"): section.get("title")
             for section in sections
+            if is_valid_section_title(str(section.get("title") or ""))
         }
         for chunk in chunks:
             text = str(chunk.get("text") or "").strip()

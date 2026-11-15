@@ -105,6 +105,17 @@
     return paper.arxiv_id ? "版本未知" : "";
   }
 
+  function displaySectionTitle(value) {
+    const title = String(value || "").trim();
+    if (!title) return "";
+    if (!/^[A-Z\u3400-\u9fff]/.test(title)) return "";
+    if (/[.,;:!?\u2013\u2014-]$/.test(title) || title.split(/\s+/).length > 10) return "";
+    const words = title.match(/[A-Za-z]+/g) || [];
+    if (words.length >= 6 && words.filter((word) => /^[A-Z]/.test(word)).length / words.length < 0.45) return "";
+    if (/[\u00b7\u2022%]/.test(title)) return "";
+    return title;
+  }
+
   function versionRelationNotice(paper) {
     const relation = paper.version_relation;
     if (!relation || relation.kind === "none") return "";
@@ -562,11 +573,15 @@
     const displayAnswer = hasReadableAnswer ? formattedAnswer : "详细公式请查看下方引用的论文原文。";
     elements.answerResult.innerHTML = renderAnswerContent(displayAnswer);
     const citations = Array.isArray(payload.citations) ? payload.citations : [];
-    elements.answerCitations.innerHTML = citations.map((item) => {
+    const citationLinks = citations.map((item) => {
       const source = item.source || {};
       const pageLabel = source.page_start === source.page_end ? `第 ${source.page_start} 页` : `第 ${source.page_start}–${source.page_end} 页`;
-      return `<button type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}"><strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.paper_title || item.filename)}</strong><span>${escapeHtml([item.section_title, source.version_label, pageLabel].filter(Boolean).join(" · "))}</span></button>`;
+      const sectionTitle = displaySectionTitle(item.section_title);
+      return `<button type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}"><strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.paper_title || item.filename)}</strong><span>${escapeHtml([sectionTitle, source.version_label, pageLabel].filter(Boolean).join(" · "))}</span></button>`;
     }).join("");
+    elements.answerCitations.innerHTML = citationLinks
+      ? `<details class="answer-citation-details"><summary>查看引用来源（${citations.length}）</summary><div class="answer-citation-list">${citationLinks}</div></details>`
+      : "";
   }
 
   function renderEvidence(items, totalCandidates) {
@@ -590,7 +605,7 @@
         const pageLabel = source.page_start === source.page_end
           ? `第 ${source.page_start} 页`
           : `第 ${source.page_start}–${source.page_end} 页`;
-        const location = [item.section_title, source.version_label, pageLabel].filter(Boolean).join(" · ");
+        const location = [displaySectionTitle(item.section_title), source.version_label, pageLabel].filter(Boolean).join(" · ");
         return `
           <article class="evidence-result">
             <div class="evidence-result-head"><span>${escapeHtml(item.citation_id ? `[${item.citation_id}]` : `证据 ${index + 1}`)}</span><strong>${escapeHtml(item.paper_title || item.filename)}</strong></div>
