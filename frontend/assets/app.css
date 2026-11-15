@@ -2923,3 +2923,8 @@ button.tool-result-card { cursor: pointer; }
 .original-pdf-viewport { max-height: 70vh; min-height: 200px; overflow: auto; background: #e9ecf3; border: 1px solid #e0e4ed; border-radius: 10px; }
 .original-pdf-image { display: block; width: 100%; height: auto; max-width: none; margin: 0 auto; }
 .reading-zoom { display: flex; gap: 12px; align-items: center; margin: 12px 0; font-size: 13px; color: #667085; }
+.library-row-actions { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.delete-paper-button { border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; color: #bd3546; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.delete-paper-button:hover { background: #fff1f2; border-color: #fecdd3; }
+.delete-paper-button:focus-visible { outline: 2px solid #bd3546; outline-offset: 2px; }
+.delete-paper-button:disabled { opacity: .55; cursor: wait; }

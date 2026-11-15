@@ -398,6 +398,23 @@ def get_paper(paper_id: uuid.UUID) -> dict[str, Any]:
     return _public_paper(_load_paper(paper_id))
 
 
+@router.delete("/{paper_id}", status_code=204)
+def delete_paper(paper_id: uuid.UUID):
+    """Permanently delete exactly one record and its derived files."""
+    # Share the scheduling lock so OCR cannot start between the check and removal.
+    from app import ocr
+    with ocr._LOCK, _STORE_LOCK:
+        _load_paper(paper_id)
+        if str(paper_id) in ocr._ACTIVE:
+            raise HTTPException(409, "该论文正在 OCR 识别，请等待处理结束后再删除。")
+        directory = _papers_dir() / str(paper_id)
+        try:
+            shutil.rmtree(directory)
+        except OSError as error:
+            raise HTTPException(503, "删除未完成，请刷新论文库后重试。") from error
+    return Response(status_code=204)
+
+
 @router.get("/{paper_id}/pages/{page_number}")
 def get_paper_page(paper_id: uuid.UUID, page_number: int) -> dict[str, Any]:
     metadata = _load_paper(paper_id)

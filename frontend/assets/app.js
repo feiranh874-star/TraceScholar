@@ -24,6 +24,7 @@
     comparisonPaperIds: [],
     drawerReturnFocus: null,
     detailRequestId: 0,
+    deletingPaperId: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -365,7 +366,7 @@
             <td>${paper.page_count} 页</td>
             <td><span class="status-badge ${status.className}">${status.label}</span></td>
             <td>${formatDate(paper.created_at, true)}</td>
-            <td><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button></td>
+            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button><button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button></div></td>
           </tr>
         `;
       })
@@ -811,6 +812,44 @@
     } finally {
       elements.refreshPapers.disabled = false;
       elements.refreshPapers.classList.remove("is-spinning");
+    }
+  }
+
+  async function deletePaper(paperId) {
+    if (state.deletingPaperId) return;
+    const paper = state.papers.find(item => item.paper_id === paperId);
+    if (!paper) return;
+    if (state.answering || state.retrieving) {
+      showToast("请等待当前问答或检索结束后再删除论文。", "error");
+      return;
+    }
+    const label = `${paperTitle(paper)}${paper.version_label ? `（${paper.version_label}）` : ""}\n文件：${paper.filename}`;
+    if (!window.confirm(`确定永久删除这条论文记录吗？\n\n${label}\n\n将删除此记录的 PDF、识别文字和检索索引，无法撤销；其他版本不受影响。旧回答中指向该记录的引用将无法打开。`)) return;
+    state.deletingPaperId = paperId;
+    renderLibrary();
+    try {
+      const response = await fetch(`/api/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
+      if (!response.ok) throw await responseError(response);
+      if (state.currentPaper?.paper_id === paperId) { closeDrawer(); state.currentPaper = null; }
+      state.papers = state.papers.filter(item => item.paper_id !== paperId);
+      state.total = Math.max(0, state.total - 1);
+      state.comparisonPaperIds = state.comparisonPaperIds.filter(id => id !== paperId);
+      if (elements.researchPaperScope.value === paperId) elements.researchPaperScope.value = "";
+      state.pendingUpload = null;
+      resetUploadPanel();
+      clearAnswer();
+      elements.evidenceResults.innerHTML = '<div class="evidence-empty">论文库已更新，请重新检索。</div>';
+      elements.evidenceCount.textContent = "等待检索";
+      ["graphResult", "recommendResult", "outlineResult"].forEach(id => { byId(id).textContent = "论文库已更新，请重新生成。"; });
+      renderToolPapers();
+      renderAll();
+      await loadPapers({ quiet: true });
+      showToast("已删除这条论文记录，其他版本不受影响。", "success");
+    } catch (error) {
+      showToast(friendlyError(error, "论文删除失败，请稍后重试。"), "error");
+    } finally {
+      state.deletingPaperId = null;
+      renderLibrary();
     }
   }
 
@@ -1327,6 +1366,8 @@
     bindDropzone(elements.largeDropzone);
 
     document.addEventListener("click", (event) => {
+      const deleteButton = event.target.closest("[data-delete-paper]");
+      if (deleteButton) { deletePaper(deleteButton.dataset.deletePaper); return; }
       const importButton = event.target.closest("[data-import-arxiv]");
       if (importButton) importArxiv(importButton);
       const versionAction = event.target.closest("[data-version-action]");

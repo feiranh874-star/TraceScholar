@@ -50,6 +50,15 @@ def test_health_is_public_but_upload_requires_auth(tmp_path, monkeypatch):
     assert not (papers.DATA_DIR / "papers").exists()
 
 
+def test_delete_requires_auth_and_rejects_cross_site_requests(tmp_path, monkeypatch):
+    monkeypatch.setattr(papers, 'DATA_DIR', tmp_path / 'data')
+    client = TestClient(create_app(production_settings()))
+    endpoint = '/api/papers/00000000-0000-0000-0000-000000000001'
+    assert client.delete(endpoint).status_code == 401
+    assert client.delete(endpoint, auth=TEST_AUTH, headers={'Origin': 'https://other.example'}).status_code == 403
+    assert client.delete(endpoint, auth=TEST_AUTH).status_code == 404
+
+
 def test_valid_login_serves_ui_and_disables_docs(tmp_path, monkeypatch):
     monkeypatch.setattr(papers, "DATA_DIR", tmp_path / "data")
     client = authenticated_client(production_settings())

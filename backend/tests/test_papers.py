@@ -27,6 +27,46 @@ def make_pdf(*page_texts: str) -> bytes:
     return payload
 
 
+def test_delete_one_version_removes_files_and_retrieval_but_keeps_other_version(client):
+    latest_pdf = make_pdf("A newer version describes scaled dot product attention and its training procedure.")
+    older_pdf = make_pdf("An older manuscript explains convolutional neural networks and image experiments.")
+    latest = client.post('/api/papers', files={'file': ('1706.03762v7.pdf', latest_pdf, 'application/pdf')}).json()
+    older = client.post('/api/papers', files={'file': ('1706.03762v1.pdf', older_pdf, 'application/pdf')}).json()
+    pid = latest['paper_id']
+    assert client.delete(f'/api/papers/{pid}').status_code == 204
+    assert not (papers._papers_dir() / pid).exists()
+    for suffix in ('', '/pages/1', '/structure', '/source.pdf', '/render/1'):
+        assert client.get(f'/api/papers/{pid}{suffix}').status_code == 404
+    remaining = client.get('/api/papers').json()
+    assert remaining['total'] == 1
+    assert remaining['items'][0]['paper_id'] == older['paper_id']
+    assert remaining['items'][0]['version_relation']['kind'] == 'none'
+    retrieved = client.post('/api/research/retrieve', json={'question': 'scaled dot product attention'}).json()
+    assert all(item['source']['paper_id'] != pid for item in retrieved['items'])
+    assert client.delete(f'/api/papers/{pid}').status_code == 404
+    assert client.delete('/api/papers/not-a-uuid').status_code == 422
+    restored = client.post('/api/papers', files={'file': ('1706.03762v7.pdf', latest_pdf, 'application/pdf')})
+    assert restored.status_code == 201
+    assert restored.json()['paper_id'] != pid and not restored.json()['duplicate']
+
+
+def test_delete_is_blocked_during_ocr_then_allowed(client):
+    from app import ocr
+    paper = client.post('/api/papers', files={'file': ('scan.pdf', make_pdf(''), 'application/pdf')}).json()
+    pid = paper['paper_id']
+    with ocr._LOCK:
+        ocr._ACTIVE.add(pid)
+    try:
+        result = client.delete(f'/api/papers/{pid}')
+        assert result.status_code == 409 and 'OCR' in result.json()['detail']
+        assert client.get(f'/api/papers/{pid}').status_code == 200
+    finally:
+        with ocr._LOCK:
+            ocr._ACTIVE.discard(pid)
+    assert client.delete(f'/api/papers/{pid}').status_code == 204
+    assert client.post(f'/api/papers/{pid}/ocr').status_code == 404
+
+
 def test_upload_persists_per_page_text_and_metadata(client):
     payload = make_pdf("This is a sufficiently long first page for extraction.", "Second page has enough text for extraction.")
     response = client.post("/api/papers", files={"file": ("paper.pdf", payload, "application/pdf")})

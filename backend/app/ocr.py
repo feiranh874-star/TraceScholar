@@ -131,14 +131,16 @@ def ocr_status(paper_id: uuid.UUID):
 
 @router.post('/{paper_id}/ocr', status_code=202)
 def start_ocr(paper_id: uuid.UUID, background: BackgroundTasks):
-    metadata = papers._load_paper(paper_id)
-    remaining = [page['page'] for path in sorted((papers._papers_dir()/str(paper_id)/'pages').glob('*.json'))
-                 if (page := papers._read_metadata(path)) and page.get('needs_ocr')]
-    if not remaining:
-        _reindex(str(paper_id))
-        return {'status': 'done', 'remaining_pages': []}
     with _LOCK:
-        if str(paper_id) in _ACTIVE or not _SLOT.acquire(blocking=False):
+        papers._load_paper(paper_id)
+        if str(paper_id) in _ACTIVE:
+            raise HTTPException(409, '已有 OCR 任务运行，请等待完成后重试。')
+        remaining = [page['page'] for path in sorted((papers._papers_dir()/str(paper_id)/'pages').glob('*.json'))
+                     if (page := papers._read_metadata(path)) and page.get('needs_ocr')]
+        if not remaining:
+            _reindex(str(paper_id))
+            return {'status': 'done', 'remaining_pages': []}
+        if not _SLOT.acquire(blocking=False):
             raise HTTPException(409, '已有 OCR 任务运行，请等待完成后重试。')
         _ACTIVE.add(str(paper_id))
     job = {'status': 'running', 'requested_pages': remaining, 'total': len(remaining),
