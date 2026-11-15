@@ -39,7 +39,10 @@
     el('readerWarnings').textContent = paper.needs_ocr_pages?.length ? '扫描页需完成 OCR 才能读取正文。版本关联可通过文件名中的论文标识判断；没有标识且正文尚未识别时，关联可能漏检。' : '可检索文字已建立索引。OCR 文字可能有误，请以原版为准。';
     const structure = await request('/api/papers/' + paperId + '/structure'), select = el('sectionSelect'), previous=select.value;
     select.replaceChildren(new Option('选择章节',''));
-    for (const section of structure.sections||[]) select.add(new Option(section.title+' · 第 '+section.page_start+' 页',section.page_start));
+    for (const section of structure.sections||[]) {
+      const heading = [section.number, section.title].filter(Boolean).join(' ');
+      select.add(new Option(heading+' · 第 '+section.page_start+' 页',section.page_start));
+    }
     select.value=previous;
   }
   function fitImage() {
