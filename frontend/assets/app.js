@@ -3,6 +3,7 @@
 
   const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
   const viewLabels = {
+    tools: { eyebrow: "有来源的研究辅助", title: "研究工具" },
     overview: { eyebrow: "研究资料总览", title: "科研工作台" },
     library: { eyebrow: "可信科研知识库", title: "论文库" },
     import: { eyebrow: "PDF 解析入库", title: "导入资料" },
@@ -16,6 +17,7 @@
     currentPage: 1,
     activeView: "overview",
     uploading: false,
+    pendingUpload: null,
     retrieving: false,
     answering: false,
     comparisonMode: false,
@@ -247,6 +249,7 @@
     elements.pageTitle.textContent = viewLabels[view].title;
     closeMobileNavigation();
     if (view === "library") renderLibrary();
+    if (view === "tools") renderToolPapers();
     if (view === "research") renderResearchScope();
     document.querySelector(".content")?.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -786,6 +789,7 @@
       const payload = await response.json();
       state.papers = Array.isArray(payload.items) ? payload.items : [];
       state.total = Number(payload.total) || state.papers.length;
+      renderToolPapers();
       renderAll();
       return state.papers;
     } catch (error) {
@@ -872,7 +876,19 @@
       elements.pageNumber.max = String(paper.page_count);
       elements.pageTotal.textContent = `/ ${paper.page_count}`;
       renderMetadata(paper);
+      const original = `/api/papers/${encodeURIComponent(paperId)}/source.pdf`;
+      byId("originalPdfLink").href = original;
+      byId("ocrButton").disabled = false;
+      byId("ocrButton").hidden = !paper.needs_ocr_pages?.length;
+      byId("ocrStatus").textContent = paper.needs_ocr_pages?.length ? `还有 ${paper.needs_ocr_pages.length} 页待识别；OCR 不调用大模型。` : "";
+      byId("translationResult").textContent = "";
+      byId("translationSource").value = "";
+      const structureResponse = await fetch(`/api/papers/${encodeURIComponent(paperId)}/structure`);
+      if (requestId !== state.detailRequestId) return;
+      const structure = structureResponse.ok ? await structureResponse.json() : {};
+      byId("sectionSelect").innerHTML = '<option value="">选择章节</option>' + (structure.sections || []).map(section => `<option value="${section.page_start}">${escapeHtml(section.title)} · 第 ${section.page_start} 页</option>`).join("");
       await loadPage(state.currentPage);
+      if (paper.needs_ocr_pages?.length) pollOcr(paperId);
     } catch (error) {
       if (requestId !== state.detailRequestId) return;
       const message = friendlyError(error, "论文详情读取失败。");
@@ -883,6 +899,8 @@
 
   function closeDrawer() {
     state.detailRequestId += 1;
+    window.clearTimeout(state.ocrPoll);
+    byId("originalPdfImage").removeAttribute("src");
     elements.drawer.classList.remove("is-open");
     elements.drawerBackdrop.classList.remove("is-visible");
     elements.drawer.setAttribute("aria-hidden", "true");
@@ -906,6 +924,9 @@
     const page = Math.min(total, Math.max(1, Number(pageNumber) || 1));
     const requestedPaperId = state.currentPaper.paper_id;
     state.currentPage = page;
+    byId("originalPdfImage").src = `/api/papers/${encodeURIComponent(requestedPaperId)}/render/${page}`;
+    byId("translationSource").value = "";
+    byId("translationResult").textContent = "";
     updatePageControls(page);
     elements.pageText.classList.remove("needs-ocr");
     elements.pageText.innerHTML = '<div class="reader-placeholder is-loading">正在读取本页原文…</div>';
@@ -923,13 +944,73 @@
         elements.pageText.innerHTML = `
           <div class="page-empty page-ocr">
             <strong>本页没有可读取的文字</strong>
-            <span>这可能是扫描页，后续接入 OCR 后可继续识别。</span>
+            <span>这可能是扫描页，可点击上方“识别扫描页”取得可检索文字。</span>
           </div>
         `;
       }
     } catch (error) {
       elements.pageText.innerHTML = `<div class="reader-placeholder is-error">${escapeHtml(friendlyError(error, "本页读取失败。"))}</div>`;
     }
+  }
+
+  async function pollOcr(paperId) {
+    if (state.currentPaper?.paper_id !== paperId || !elements.drawer.classList.contains("is-open")) return;
+    try {
+      const response = await fetch(`/api/papers/${paperId}/ocr`);
+      if (!response.ok) throw await responseError(response);
+      const job = await response.json();
+      if (state.currentPaper?.paper_id !== paperId) return;
+      if (job.status === "idle") return;
+      byId("ocrStatus").textContent = job.status === "running"
+        ? `OCR 正在处理：${job.processed || 0} / ${job.total} 页（实际已处理页数）`
+        : `${({done: "OCR 完成", partial: "部分页面未识别", failed: "OCR 未完成", interrupted: "OCR 已中断"})[job.status] || "等待识别"}。${job.message || ""} ${job.failed_pages?.map(p => `第 ${p.page} 页：${p.message}`).join("；") || ""}`;
+      byId("ocrButton").disabled = job.status === "running";
+      if (job.status === "running") state.ocrPoll = window.setTimeout(() => pollOcr(paperId), 1500);
+      else {
+        await loadPapers({ quiet: true });
+        const current = state.papers.find(p => p.paper_id === paperId);
+        if (current) { state.currentPaper = current; renderMetadata(current); byId("ocrButton").hidden = !current.needs_ocr_pages?.length; }
+        await loadPage(state.currentPage);
+      }
+    } catch (error) {
+      byId("ocrButton").disabled = false;
+      byId("ocrStatus").textContent = friendlyError(error, "无法读取 OCR 状态，可稍后重新查看。");
+    }
+  }
+
+  async function startOcr() {
+    const paperId = state.currentPaper?.paper_id;
+    if (!paperId) return;
+    byId("ocrButton").disabled = true;
+    try {
+      const response = await fetch(`/api/papers/${paperId}/ocr`, { method: "POST" });
+      if (!response.ok) throw await responseError(response);
+      await pollOcr(paperId);
+    } catch (error) {
+      byId("ocrButton").disabled = false;
+      byId("ocrStatus").textContent = friendlyError(error, "OCR 启动失败。");
+    }
+  }
+
+  async function translateParagraph() {
+    const paperId = state.currentPaper?.paper_id;
+    if (!paperId) return;
+    const page = state.currentPage;
+    const selection = window.getSelection();
+    const selectedText = selection && elements.pageText.contains(selection.anchorNode) ? selection.toString().trim() : "";
+    const text = selectedText || byId("translationSource").value.trim();
+    if (!text) { showToast("请先在分页文字中选中一段原文，或粘贴本页连续原文。", "error"); return; }
+    byId("translationSource").value = text;
+    byId("translateButton").disabled = true;
+    byId("translationResult").textContent = "正在翻译…";
+    try {
+      const response = await fetch(`/api/papers/${paperId}/translate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page, text, target: byId("translationTarget").value }) });
+      if (!response.ok) throw await responseError(response);
+      const result = await response.json();
+      if (state.currentPaper?.paper_id === paperId && state.currentPage === page) byId("translationResult").textContent = result.translation;
+    } catch (error) {
+      if (state.currentPaper?.paper_id === paperId && state.currentPage === page) byId("translationResult").textContent = friendlyError(error, "翻译失败。");
+    } finally { byId("translateButton").disabled = false; }
   }
 
   function validateUpload(file) {
@@ -981,6 +1062,7 @@
   }
 
   function resetUploadPanel({ choose = false } = {}) {
+    state.pendingUpload = null;
     elements.uploadProgress.classList.add("is-hidden");
     elements.uploadResult.classList.add("is-hidden");
     elements.largeDropzone.classList.remove("is-hidden");
@@ -988,7 +1070,7 @@
     if (choose) elements.fileInput.click();
   }
 
-  async function uploadFile(file) {
+  async function uploadFile(file, decision = {}) {
     const validationError = validateUpload(file);
     if (validationError) {
       showToast(validationError, "error");
@@ -1002,13 +1084,42 @@
     state.uploading = true;
     navigateTo("import");
     showUploadProgress(file);
+    state.pendingUpload = null;
     const formData = new FormData();
     formData.append("file", file, file.name);
+    formData.append("conflict_action", decision.action || "ask");
+    if (decision.target) {
+      formData.append("target_paper_id", decision.target.paper_id);
+      formData.append("target_sha256", decision.target.sha256);
+    }
 
     try {
       const response = await fetch("/api/papers", { method: "POST", body: formData });
+      if (response.status === 409 && !decision.action) {
+        const conflict = await response.json();
+        if (conflict.conflict) {
+          state.pendingUpload = { file, conflict };
+          elements.uploadProgress.classList.add("is-hidden");
+          elements.uploadResult.classList.remove("is-hidden");
+          const newer = conflict.recommendation === "keep_existing_newer";
+          elements.uploadResult.innerHTML = `<div class="result-card"><div class="result-copy">
+            <span class="section-kicker">发现关联论文 · 尚未入库</span>
+            <h3>${newer ? "资料库中已有更新版本" : "请确认如何保存这份资料"}</h3>
+            <p>本次：${escapeHtml(conflict.incoming.filename)} ${escapeHtml(conflict.incoming.version_label || "版本未知")}</p>
+            ${conflict.matches.map(m => `<p>${escapeHtml(paperTitle(m.paper))} · ${escapeHtml(m.paper.version_label || "版本未知")} · ${m.basis === "content_overlap" ? "正文相似" : "论文标识匹配"} · 正文重合率 ${Math.round(m.score * 100)}%</p>`).join("")}
+            <p>${newer ? "建议保留库中新版。可取消本次导入，或保留两版用于对照。" : "相似内容可能属于不同工作，请先核对再选择。"}</p>
+            <div class="result-actions"><button class="primary-button" data-version-action="cancel">保留原记录，取消导入</button>
+            <button class="secondary-button" data-version-action="keep_both">两版都保留</button></div>
+            <details><summary>替换指定记录</summary><p>目标将退出论文库，旧文件继续保留供历史引用查看。上传旧版会使当前库使用旧版，请谨慎确认。</p>
+            <select id="replaceTarget">${conflict.matches.map(m => `<option value="${escapeHtml(m.paper.paper_id)}">${escapeHtml(m.paper.filename)} ${escapeHtml(m.paper.version_label || "")}</option>`).join("")}</select>
+            <button class="secondary-button" data-version-action="replace">确认替换所选记录</button></details>
+          </div></div>`;
+          return;
+        }
+      }
       if (!response.ok) throw await responseError(response);
       const paper = await response.json();
+      state.pendingUpload = null;
       showUploadResult(paper, true);
       await loadPapers({ quiet: true });
       showToast(paper.duplicate ? "论文已存在，已为你打开原有记录。" : "论文导入成功。", "success");
@@ -1020,6 +1131,121 @@
       state.uploading = false;
       elements.fileInput.value = "";
     }
+  }
+
+  function renderToolPapers() {
+    const root = byId("toolPaperList");
+    const selected = new Set(Array.from(root.querySelectorAll("input:checked")).map(i => i.value));
+    root.innerHTML = state.papers.map(p => `<label><input type="checkbox" value="${escapeHtml(p.paper_id)}"${selected.has(p.paper_id) ? " checked" : ""}><span>${escapeHtml(paperTitle(p))}<small>${escapeHtml(p.version_label || "版本未知")} · ${p.page_count} 页</small></span></label>`).join("") || '<p>请先导入研究论文。</p>';
+  }
+
+  function toolPaperIds() {
+    const ids = Array.from(byId("toolPaperList").querySelectorAll("input:checked")).map(i => i.value);
+    if (!ids.length || ids.length > 30) throw new Error("请选择 1–30 篇研究论文。");
+    return ids;
+  }
+
+  async function toolRequest(url, body) {
+    const response = await fetch(url, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!response.ok) throw await responseError(response);
+    return response.json();
+  }
+
+  function downloadText(value, name, type = "text/plain") {
+    const url = URL.createObjectURL(new Blob([value], { type }));
+    const link = document.createElement("a"); link.href = url; link.download = name; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function runTool(buttonId, outputId, action) {
+    const button = byId(buttonId), output = byId(outputId);
+    button.disabled = true;
+    output.textContent = "正在处理…";
+    try { await action(output); }
+    catch (error) { output.textContent = friendlyError(error, "本次处理失败，请重试。"); }
+    finally { button.disabled = false; }
+  }
+
+  async function buildCitationGraph() {
+    return runTool("buildGraph", "graphResult", async output => {
+      const graph = await toolRequest("/api/library/graph", { paper_ids: toolPaperIds() });
+      const positions = new Map(graph.nodes.map((n, i) => {
+        const angle = 2 * Math.PI * i / graph.nodes.length - Math.PI / 2;
+        return [n.id, { x: 250 + 175 * Math.cos(angle), y: 210 + 155 * Math.sin(angle) }];
+      }));
+      const lines = graph.edges.map(e => {
+        const a = positions.get(e.source), b = positions.get(e.target);
+        return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#b7bfdc" stroke-width="2" marker-end="url(#arrow)" />`;
+      }).join("");
+      const nodes = graph.nodes.map((n, i) => {
+        const { x, y } = positions.get(n.id);
+        return `<g class="graph-node" role="button" tabindex="0" data-paper-id="${escapeHtml(n.id)}" aria-label="${escapeHtml(n.title)}"><title>${escapeHtml(n.title)}</title><circle cx="${x}" cy="${y}" r="23" fill="#5965d8" stroke="white" stroke-width="3"/><text x="${x}" y="${y + 5}" fill="white" text-anchor="middle">${i + 1}</text></g>`;
+      }).join("");
+      output.innerHTML = `<svg class="citation-graph" viewBox="0 0 500 420" aria-label="当前论文引用子图"><defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="24" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8" fill="#a5afce"/></marker></defs>${lines}${nodes}</svg><p class="tool-hint">${escapeHtml(graph.scope)}</p><div class="tool-result-list">${graph.nodes.map((n, i) => `<button class="tool-result-card" data-paper-id="${escapeHtml(n.id)}"><strong>${i + 1}. ${escapeHtml(n.title)}</strong><small>入边 ${n.incoming} · PageRank ${n.pagerank}</small></button>`).join("")}</div>${graph.edges.length ? `<details><summary>核对引用边及原文（${graph.edges.length}）</summary>${graph.edges.map(e => `<button class="tool-result-card" data-evidence-paper="${escapeHtml(e.source)}" data-evidence-page="${e.page}"><strong>第 ${e.page} 页参考文献 → ${escapeHtml(graph.nodes.find(n => n.id === e.target).title)}</strong><span>${escapeHtml(e.evidence)}</span></button>`).join("")}</details>` : '<p>当前没有核验到库内引用边。可选择存在引用关系的论文再试；系统不会补造连线。</p>'}<button class="text-button" id="downloadGraph">下载图谱 JSON</button>`;
+      byId("downloadGraph").onclick = () => downloadText(JSON.stringify(graph, null, 2), "citation-graph.json", "application/json");
+    });
+  }
+
+  async function recommendLocalPapers() {
+    return runTool("recommendPapers", "recommendResult", async output => {
+      const data = await toolRequest(`/api/library/recommendations/${toolPaperIds()[0]}`);
+      output.innerHTML = data.items.map(item => `<button class="tool-result-card" data-paper-id="${escapeHtml(item.paper.paper_id)}"><strong>${escapeHtml(paperTitle(item.paper))}</strong><span>${escapeHtml(item.reason)}</span><small>相似度 ${item.score} · 点开核对论文</small></button>`).join("") || '<p>没有找到可推荐的其他研究工作。请补充论文题名与摘要，或导入相关论文。</p>';
+      output.insertAdjacentHTML("beforeend", `<p class="tool-hint">${escapeHtml(data.method)}</p>`);
+    });
+  }
+
+  async function createResearchOutline(generate) {
+    return runTool(generate ? "draftOutline" : "planOutline", "outlineResult", async output => {
+      const data = await toolRequest("/api/library/outline", { paper_ids: toolPaperIds(), idea: byId("outlineIdea").value.trim(), generate });
+      const evidence = data.draft?.citations || data.evidence;
+      output.innerHTML = `<div class="outline-sections">${data.sections.map(s => `<article><h4>${escapeHtml(s.title)}</h4><p>${escapeHtml(s.guidance)}</p></article>`).join("")}</div>${data.draft?.answer ? `<div class="translation-result">${escapeHtml(data.draft.answer)}</div>` : ""}<details open><summary>真实参考文献（仅所选库内记录）</summary>${data.references.map(r => `<button class="tool-result-card" data-paper-id="${escapeHtml(r.paper_id)}"><strong>[${r.label}] ${escapeHtml(r.title)}</strong><span>${escapeHtml(r.authors.join(", "))}</span><small>${escapeHtml(r.arxiv_id || r.doi || "元数据未报告 DOI/arXiv，不补造")}</small></button>`).join("")}</details><details><summary>查看提纲依据</summary>${evidence.map((e, i) => `<button class="tool-result-card" data-evidence-paper="${escapeHtml(e.source.paper_id)}" data-evidence-page="${e.source.page_start}"><strong>[${escapeHtml(e.citation_id || `E${i + 1}`)}] ${escapeHtml(e.paper_title || e.filename)} · 第 ${e.source.page_start} 页</strong><span>${escapeHtml(e.text)}</span></button>`).join("")}</details><div class="tool-actions"><button class="text-button" id="downloadOutline">下载 Markdown</button><button class="text-button" id="downloadDiagram">下载 Mermaid 流程脚本</button></div>`;
+      byId("downloadDiagram").onclick = () => downloadText(data.mermaid, "research-workflow.mmd");
+      byId("downloadOutline").onclick = () => {
+        const md = `# ${data.idea}\n\n${data.sections.map(s => `## ${s.title}\n\n${s.guidance}`).join("\n\n")}\n\n${data.draft?.answer || ""}\n\n## References\n\n${data.references.map(r => `[${r.label}] ${r.authors.join(", ")}. ${r.title}. ${r.arxiv_id || r.doi || ""}`).join("\n\n")}\n\n## Evidence\n\n${evidence.map((e, i) => `[${e.citation_id || `E${i + 1}`}] ${e.paper_title || e.filename}, page ${e.source.page_start}\n${e.text}`).join("\n\n")}`;
+        downloadText(md, "research-outline.md", "text/markdown");
+      };
+    });
+  }
+
+  async function searchArxiv() {
+    return runTool("searchArxiv", "arxivResult", async output => {
+      const data = await toolRequest("/api/library/search", { query: byId("arxivQuery").value.trim() });
+      output.innerHTML = data.items.map(item => `<article class="tool-result-card"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.authors.join(", "))}</small><span>${escapeHtml(item.summary)}</span><div class="tool-actions"><a href="https://arxiv.org/abs/${encodeURIComponent(item.arxiv_id)}" target="_blank" rel="noopener">查看 arXiv</a><button class="secondary-button" data-import-arxiv="${escapeHtml(item.arxiv_id)}">确认导入 ${escapeHtml(item.arxiv_id)}</button></div></article>`).join("") || '<p>未找到完全匹配的结果，可用题名中的几个关键词重试。</p>';
+    });
+  }
+
+  async function importArxiv(button) {
+    const identifier = button.dataset.importArxiv;
+    button.disabled = true; button.textContent = "正在导入…";
+    try {
+      const response = await fetch("/api/library/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ arxiv_id: identifier, conflict_action: "ask" }) });
+      if (response.status === 409) {
+        const result = await response.json();
+        if (result.conflict) { button.textContent = "已有关联版本，请手动下载后选择保留／替换"; return; }
+        throw new Error(result.detail || "关联论文状态已变化，请重试。");
+      }
+      if (!response.ok) throw await responseError(response);
+      const paper = await response.json(); await loadPapers({ quiet: true });
+      button.textContent = paper.duplicate ? "库中已有此文件" : "已导入，点击查看";
+      button.onclick = () => openPaper(paper.paper_id, button);
+      delete button.dataset.importArxiv;
+    } catch (error) { button.textContent = "重试导入"; showToast(friendlyError(error, "导入失败。"), "error"); }
+    finally { button.disabled = false; }
+  }
+
+  async function buildCsvChart(event) {
+    event.preventDefault();
+    return runTool("buildChart", "chartResult", async output => {
+      const file = byId("chartFile").files[0];
+      if (!file || file.size > 1024 * 1024) throw new Error("请选择不超过 1 MiB 的 UTF-8 CSV。");
+      const body = new FormData(); body.append("file", file); body.append("x", byId("chartX").value); body.append("y", byId("chartY").value); body.append("kind", byId("chartKind").value);
+      const response = await fetch("/api/library/chart", { method: "POST", body });
+      if (!response.ok) throw await responseError(response);
+      const data = await response.json();
+      output.innerHTML = '<img class="csv-figure" alt="由上传数据生成的图表" id="chartImage"><p id="chartCaption"></p><div class="tool-actions"><a id="downloadChart" class="text-button" download="figure.png">下载 PNG</a><button id="downloadChartScript" class="text-button">下载 Python 脚本</button></div>';
+      byId("chartImage").src = data.image; byId("downloadChart").href = data.image; byId("chartCaption").textContent = data.caption;
+      byId("downloadChartScript").onclick = () => downloadText(data.script, "plot.py", "text/x-python");
+    });
   }
 
   function bindDropzone(dropzone) {
@@ -1049,6 +1275,12 @@
   }
 
   function bindEvents() {
+    byId("buildGraph").addEventListener("click", buildCitationGraph);
+    byId("recommendPapers").addEventListener("click", recommendLocalPapers);
+    byId("planOutline").addEventListener("click", () => createResearchOutline(false));
+    byId("draftOutline").addEventListener("click", () => createResearchOutline(true));
+    byId("searchArxiv").addEventListener("click", searchArxiv);
+    byId("chartForm").addEventListener("submit", buildCsvChart);
     elements.mobileMenu.setAttribute("aria-expanded", "false");
     elements.mobileMenu.addEventListener("click", () => {
       elements.sidebar.classList.contains("is-open") ? closeMobileNavigation() : openMobileNavigation();
@@ -1095,6 +1327,18 @@
     bindDropzone(elements.largeDropzone);
 
     document.addEventListener("click", (event) => {
+      const importButton = event.target.closest("[data-import-arxiv]");
+      if (importButton) importArxiv(importButton);
+      const versionAction = event.target.closest("[data-version-action]");
+      if (versionAction && state.pendingUpload && !state.uploading) {
+        const { file, conflict } = state.pendingUpload;
+        const action = versionAction.dataset.versionAction;
+        if (action === "cancel") { state.pendingUpload = null; resetUploadPanel(); showToast("已保留原记录，本次未导入。", "success"); }
+        else {
+          const target = conflict.matches.find(m => m.paper.paper_id === byId("replaceTarget")?.value)?.paper;
+          uploadFile(file, { action, target });
+        }
+      }
       if (event.target.closest("[data-go-import]")) navigateTo("import");
       if (event.target.closest("[data-go-library]")) navigateTo("library");
 
@@ -1116,6 +1360,14 @@
       if (event.target.closest("[data-retry-load]")) loadPapers();
     });
 
+    byId("readerZoom").addEventListener("input", event => {
+      byId("originalPdfImage").style.width = `${event.target.value}%`;
+      byId("readerZoomLabel").textContent = `${event.target.value}%`;
+    });
+    byId("originalPdfImage").addEventListener("error", () => showToast("本页原版预览加载失败，可在新窗口打开 PDF。", "error"));
+    byId("ocrButton").addEventListener("click", startOcr);
+    byId("translateButton").addEventListener("click", translateParagraph);
+    byId("sectionSelect").addEventListener("change", event => { if (event.target.value) loadPage(event.target.value); });
     elements.closeDrawer.addEventListener("click", closeDrawer);
     elements.drawerBackdrop.addEventListener("click", closeDrawer);
     elements.prevPage.addEventListener("click", () => loadPage(state.currentPage - 1));

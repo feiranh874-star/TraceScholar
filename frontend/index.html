@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=7" />
+    <link rel="stylesheet" href="/assets/app.css?v=8" />
   </head>
   <body>
     <div class="app-shell">
@@ -26,7 +26,7 @@
         </nav>
 
         <div class="nav-section-label">研究工具</div>
-        <div class="disabled-nav"><span><i></i>研究图谱 · 规划中</span></div>
+        <button class="nav-item" data-view="tools"><span class="nav-icon">◇</span>研究工具</button>
 
         <div class="sidebar-footer">
           <div class="api-state" id="apiState"><span class="status-dot is-checking"></span><div><strong>正在连接</strong><small>科研资料服务</small></div></div>
@@ -50,7 +50,7 @@
               <div class="hero-copy">
                 <span class="hero-tag"><i></i>可信科研知识库</span>
                 <h2>让每一个科研结论<br/>都有原文依据</h2>
-                <p>导入论文 PDF，保留页码和原文证据。下一步将支持版本识别、可溯源问答与多论文比较。</p>
+                <p>导入论文与扫描资料，核对版本、阅读原文，用可追溯证据完成问答与多论文比较。</p>
                 <div class="hero-actions"><button class="primary-button is-light" data-go-import>开始导入</button><button class="text-button" data-go-library>查看论文库 <span>→</span></button></div>
               </div>
               <div class="hero-visual" aria-hidden="true"><div class="paper-stack paper-back"></div><div class="paper-stack paper-middle"></div><div class="paper-sheet"><div class="paper-head"><span></span><i></i></div><div class="paper-title-line"></div><div class="paper-line wide"></div><div class="paper-line"></div><div class="paper-line medium"></div><div class="evidence-card"><i></i><span>证据定位 · 第 3 页</span></div></div><div class="trace-line"></div></div>
@@ -100,18 +100,37 @@
           </section>
 
           <section class="view" id="view-import" data-view-panel="import">
-            <div class="section-toolbar"><div><span class="section-kicker">PDF 解析入库</span><h2>导入研究资料</h2><p>系统将提取论文元数据和逐页文本，并标记可能需要 OCR 的页面。</p></div></div>
-            <div class="import-layout"><section class="panel full-drop-panel"><div class="large-dropzone" id="largeDropzone" tabindex="0" role="button"><div class="large-upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></div><h3>将论文 PDF 拖放到这里</h3><p>支持可复制文字的 PDF；扫描件会自动标记为待 OCR。</p><button class="primary-button" type="button">选择本地 PDF</button><span class="upload-limits">单个文件不超过 50 MiB · 最多 2000 页 · 不支持加密 PDF</span></div><div class="upload-progress is-hidden" id="uploadProgress"><div class="progress-icon"><span></span></div><div class="progress-copy"><strong id="uploadFilename">正在处理 PDF</strong><span>上传并提取逐页文本，请稍候…</span><div class="progress-track"><i></i></div></div></div><div class="upload-result is-hidden" id="uploadResult"></div></section><aside class="import-guide"><div class="guide-title"><span>处理流程</span><strong>导入后会发生什么？</strong></div><ol class="steps"><li><i>1</i><div><strong>文件安全检查</strong><span>验证格式、大小、页数与加密状态</span></div></li><li><i>2</i><div><strong>逐页解析</strong><span>提取题名、作者、页码和正文文本</span></div></li><li><i>3</i><div><strong>扫描页识别</strong><span>标记缺少可检索文字的页面</span></div></li><li><i>4</i><div><strong>建立可信索引</strong><span>保留论文与原始页码的对应关系</span></div></li></ol><div class="guide-tip"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A7 7 0 1 1 15.5 14.5c-1 .8-1.5 1.7-1.5 3h-4c0-1.3-.5-2.2-1.5-3Z"/></svg><p><strong>推荐测试资料</strong><span>先导入 Transformer 论文 v7，再导入 v1，为后续版本识别做准备。</span></p></div></aside></div>
+            <div class="section-toolbar"><div><span class="section-kicker">PDF 解析入库</span><h2>导入研究资料</h2><p>系统将提取论文元数据和逐页文本，并标记扫描页，导入后可启动本地 OCR。</p></div></div>
+            <div class="import-layout"><section class="panel full-drop-panel"><div class="large-dropzone" id="largeDropzone" tabindex="0" role="button"><div class="large-upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></div><h3>将论文 PDF 拖放到这里</h3><p>支持可复制文字的 PDF；扫描件导入后，可在详情中启动 OCR 识别。</p><button class="primary-button" type="button">选择本地 PDF</button><span class="upload-limits">单个文件不超过 50 MiB · 最多 2000 页 · 不支持加密 PDF</span></div><div class="upload-progress is-hidden" id="uploadProgress"><div class="progress-icon"><span></span></div><div class="progress-copy"><strong id="uploadFilename">正在处理 PDF</strong><span>上传并提取逐页文本，请稍候…</span><div class="progress-track"><i></i></div></div></div><div class="upload-result is-hidden" id="uploadResult"></div></section><aside class="import-guide"><div class="guide-title"><span>处理流程</span><strong>导入后会发生什么？</strong></div><ol class="steps"><li><i>1</i><div><strong>文件安全检查</strong><span>验证格式、大小、页数与加密状态</span></div></li><li><i>2</i><div><strong>逐页解析</strong><span>提取题名、作者、页码和正文文本</span></div></li><li><i>3</i><div><strong>扫描页识别</strong><span>标记缺少可检索文字的页面</span></div></li><li><i>4</i><div><strong>建立可信索引</strong><span>保留论文与原始页码的对应关系</span></div></li></ol><div class="guide-tip"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A7 7 0 1 1 15.5 14.5c-1 .8-1.5 1.7-1.5 3h-4c0-1.3-.5-2.2-1.5-3Z"/></svg><p><strong>推荐测试资料</strong><span>先导入 Transformer 论文 v7，再导入 v1，为后续版本识别做准备。</span></p></div></aside></div>
+          </section>
+          <section class="view" id="view-tools" data-view-panel="tools">
+            <div class="section-toolbar"><div><span class="section-kicker">从证据走向研究</span><h2>研究工具</h2><p>选择本地论文，查看真实引用、发现相关工作，并整理写作与图表。</p></div></div>
+            <section class="panel tools-selection"><h3>本轮研究资料</h3><div id="toolPaperList" class="tool-paper-list"></div><p class="tool-hint">图谱最多选 30 篇，写作最多 8 篇。图谱、推荐和基础提纲不调用模型；扩写及翻译按模型实际用量计费。</p></section>
+            <div class="tool-grid">
+              <section class="panel tool-panel"><span class="section-kicker">文献关系</span><h3>引用图谱</h3><p>在参考文献区匹配库内题名，使用 PageRank 找到当前子图中的重要节点。</p><button id="buildGraph" class="secondary-button">构建所选论文图谱</button><div id="graphResult" aria-live="polite"></div></section>
+              <section class="panel tool-panel"><span class="section-kicker">相关工作</span><h3>本地论文推荐</h3><p>以所选的第一篇为起点，根据题名与摘要的共同术语推荐其他研究工作。</p><button id="recommendPapers" class="secondary-button">发现相关论文</button><div id="recommendResult" aria-live="polite"></div></section>
+              <section class="panel tool-panel tool-wide"><span class="section-kicker">写作起点</span><h3>有来源的研究提纲</h3><label>研究想法<textarea id="outlineIdea" rows="3" maxlength="500" placeholder="例如：比较 attention 与图文对比学习在迁移任务中的应用"></textarea></label><div class="tool-actions"><button id="planOutline" class="secondary-button">整理提纲与真实参考文献</button><button id="draftOutline" class="primary-button">基于证据扩写（调用模型）</button></div><div id="outlineResult" aria-live="polite"></div></section>
+              <section class="panel tool-panel"><span class="section-kicker">扩展文献库</span><h3>arXiv 题名检索</h3><label>论文英文题名<input id="arxivQuery" maxlength="180" placeholder="Attention Is All You Need" /></label><button id="searchArxiv" class="secondary-button">检索公开论文</button><p class="tool-hint">先核对题名与版本，再确认导入。当前不包含定时追踪。</p><div id="arxivResult" aria-live="polite"></div></section>
+              <section class="panel tool-panel"><span class="section-kicker">实验数据</span><h3>CSV 图表与图注</h3><form id="chartForm"><label>UTF-8 CSV（最多 1 MiB / 1000 行）<input id="chartFile" type="file" accept=".csv,text/csv" required /></label><div class="tool-fields"><label>X 列名<input id="chartX" placeholder="epoch" required maxlength="100" /></label><label>Y 数值列名<input id="chartY" placeholder="accuracy" required maxlength="100" /></label></div><label>图表类型<select id="chartKind"><option value="line">折线图</option><option value="bar">柱状图</option></select></label><button class="secondary-button" id="buildChart" type="submit">生成图表与可复现脚本</button></form><div id="chartResult" aria-live="polite"></div></section>
+            </div>
           </section>
         </main>
       </div>
     </div>
 
     <div class="drawer-backdrop" id="drawerBackdrop"></div>
-    <aside class="paper-drawer" id="paperDrawer" aria-hidden="true"><header class="drawer-header"><div><span class="section-kicker">论文详情</span><h2 id="drawerTitle">论文题名</h2></div><button class="icon-button" id="closeDrawer" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div class="drawer-body"><div class="metadata-grid" id="drawerMetadata"></div><div class="warning-box is-hidden" id="drawerWarning"></div><div class="page-reader"><div class="reader-toolbar"><div><span class="section-kicker">分页原文</span><strong id="readerPageLabel">第 1 页</strong></div><div class="page-controls"><button id="prevPage" aria-label="上一页">←</button><input id="pageNumber" type="number" min="1" value="1"/><span id="pageTotal">/ 1</span><button id="nextPage" aria-label="下一页">→</button></div></div><article class="page-text" id="pageText"><div class="reader-placeholder">选择论文后查看逐页文本</div></article></div></div></aside>
+    <aside class="paper-drawer" id="paperDrawer" aria-hidden="true"><header class="drawer-header"><div><span class="section-kicker">论文详情</span><h2 id="drawerTitle">论文题名</h2></div><button class="icon-button" id="closeDrawer" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div class="drawer-body"><details class="reader-metadata"><summary>查看论文元数据与版本信息</summary><div class="metadata-grid" id="drawerMetadata"></div><div class="warning-box is-hidden" id="drawerWarning"></div></details><div class="page-reader"><div class="reader-toolbar"><div><span class="section-kicker">分页原文</span><strong id="readerPageLabel">第 1 页</strong></div><div class="page-controls"><button id="prevPage" aria-label="上一页">←</button><input id="pageNumber" type="number" min="1" value="1"/><span id="pageTotal">/ 1</span><button id="nextPage" aria-label="下一页">→</button></div></div><div class="reading-tools"><a id="originalPdfLink" target="_blank" rel="noopener">新窗口打开原版 PDF</a><button class="secondary-button" id="ocrButton" type="button">识别扫描页 / 继续 OCR</button></div>
+<div id="ocrStatus" class="reading-status" aria-live="polite"></div>
+<label class="reading-toc">章节导航 <select id="sectionSelect"><option value="">选择章节</option></select></label>
+<label class="reading-zoom">阅读缩放 <input id="readerZoom" type="range" min="70" max="180" value="100"><span id="readerZoomLabel">100%</span></label><div class="original-pdf-viewport"><img id="originalPdfImage" class="original-pdf-image" alt="按原版 PDF 渲染的当前页"></div>
+<details class="reader-transcript" open><summary>分页文字与段落翻译</summary>
+<article class="page-text" id="pageText"><div class="reader-placeholder">选择论文后查看逐页文本</div></article>
+<label>从上方原文选中一段后点击翻译；也可粘贴本页连续原文<textarea id="translationSource" rows="4" maxlength="8000"></textarea></label>
+<div class="reading-tools"><select id="translationTarget"><option value="zh">翻译成中文</option><option value="en">翻译成英文</option></select><button class="secondary-button" id="translateButton" type="button">翻译选中段落（调用模型）</button></div>
+<div id="translationResult" class="translation-result" aria-live="polite"></div></details></div></div></aside>
 
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/assets/app.js?v=9" defer></script>
+    <script src="/assets/app.js?v=10" defer></script>
   </body>
 </html>

@@ -9,6 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from app.config import Settings
 from app.papers import router as papers_router
 from app.research import router as research_router
+from app.ocr import router as ocr_router
+from app.reading import router as reading_router
+from app.library_tools import router as library_router
+from app.charts import router as charts_router
+from app.discovery import router as discovery_router
 from app.security import DemoGuardMiddleware
 
 
@@ -44,6 +49,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_api_route("/health", health, tags=["system"])
     application.include_router(papers_router)
     application.include_router(research_router)
+    application.include_router(ocr_router)
+    application.include_router(reading_router)
+    application.include_router(library_router)
+    application.include_router(charts_router)
+    application.include_router(discovery_router)
     if ASSETS_DIR.exists():
         application.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="frontend-assets")
     application.add_api_route("/", frontend_home, include_in_schema=False)

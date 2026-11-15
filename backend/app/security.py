@@ -109,7 +109,7 @@ class DemoGuardMiddleware:
                 await JSONResponse({"detail": "请求体超过大小限制。"}, status_code=413)(scope, receive, send)
                 return
 
-        is_upload = path.rstrip("/") == "/api/papers" and scope["method"] == "POST"
+        is_upload = (path.rstrip("/") in {"/api/papers", "/api/library/import"}) and scope["method"] == "POST"
         if is_upload:
             now = time.monotonic()
             self._trim(self.upload_times, now)
@@ -144,7 +144,7 @@ class DemoGuardMiddleware:
                 response_headers = list(message.get("headers", []))
                 response_headers.extend([
                     (b"x-content-type-options", b"nosniff"),
-                    (b"x-frame-options", b"DENY"),
+                    (b"x-frame-options", b"SAMEORIGIN" if path.endswith("/source.pdf") else b"DENY"),
                     (b"referrer-policy", b"same-origin"),
                 ])
                 if self.settings.demo_password:

@@ -97,11 +97,19 @@ def generate_grounded_answer(
 ) -> str:
     """Call an OpenAI-compatible chat-completions endpoint."""
 
+    return complete_messages(build_grounded_messages(question, evidence, answer_mode=answer_mode),
+                             base_url=base_url, api_key=api_key, model=model, timeout_seconds=timeout_seconds,
+                             max_tokens=COMPARISON_MAX_TOKENS if answer_mode == "comparison" else DEFAULT_MAX_TOKENS)
+
+
+def complete_messages(messages: list[dict[str, str]], *, base_url: str, api_key: str, model: str,
+                      timeout_seconds: int = 45, max_tokens: int = 2000) -> str:
+    """Shared bounded transport for grounded QA and explicit translation requests."""
     request_body = {
         "model": model,
-        "messages": build_grounded_messages(question, evidence, answer_mode=answer_mode),
+        "messages": messages,
         "temperature": 0.1,
-        "max_tokens": COMPARISON_MAX_TOKENS if answer_mode == "comparison" else DEFAULT_MAX_TOKENS,
+        "max_tokens": max_tokens,
         "stream": False,
     }
     # Flash/V4 enable thinking by default. These short, evidence-grounded answers

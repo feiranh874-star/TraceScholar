@@ -7,6 +7,8 @@
 !backend/app/
 !backend/app/*.py
 !backend/app/**/*.py
+!backend/app/native/
+!backend/app/native/*.swift
 !frontend/
 !frontend/index.html
 !frontend/assets/

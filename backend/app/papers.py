@@ -15,9 +15,10 @@ from pathlib import Path
 from typing import Any
 
 import pymupdf as fitz
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, JSONResponse, Response
 
+from app.similarity import content_signature, overlap
 from app.models import PageRecord, PaperMetadataRecord, SourceIdentifiers, VersionRelation
 from app.processing import build_chunks, derive_work_id, extract_document_metadata, extract_sections
 
@@ -65,7 +66,7 @@ def _find_duplicate(sha256: str) -> dict[str, Any] | None:
             continue
         metadata_path = paper_dir / "metadata.json"
         metadata = _read_metadata(metadata_path)
-        if metadata and metadata.get("sha256") == sha256:
+        if metadata and not metadata.get("archived") and metadata.get("sha256") == sha256:
             return metadata
     return None
 
@@ -76,7 +77,7 @@ def _all_metadata() -> list[dict[str, Any]]:
         if metadata_path.parent.name.startswith("."):
             continue
         metadata = _read_metadata(metadata_path)
-        if metadata:
+        if metadata and not metadata.get("archived"):
             papers.append(metadata)
     return papers
 
@@ -228,9 +229,16 @@ def _extract_pdf(source: Path, filename: str) -> tuple[dict[str, Any], list[dict
     status_code=status.HTTP_201_CREATED,
     responses={200: {"description": "An identical PDF already exists"}},
 )
-def upload_paper(file: UploadFile = File(...)) -> dict[str, Any]:
+def upload_paper(
+    file: UploadFile = File(...),
+    conflict_action: str = Form(default="keep_both"),
+    target_paper_id: str = Form(default=""),
+    target_sha256: str = Form(default=""),
+) -> dict[str, Any]:
     """Upload a PDF and persist extracted page text with 1-based page numbers."""
 
+    if conflict_action not in {"ask", "keep_both", "replace"}:
+        raise HTTPException(422, "Invalid conflict action")
     papers_dir = _papers_dir()
     staging_dir = Path(tempfile.mkdtemp(prefix=".upload-", dir=papers_dir))
     temp_pdf = staging_dir / "upload.part"
@@ -268,6 +276,44 @@ def upload_paper(file: UploadFile = File(...)) -> dict[str, Any]:
                 SourceIdentifiers.model_validate(extracted["identifiers"]),
                 extracted["title"],
             )
+            signature = content_signature(pages)
+            matches = []
+            for existing in _all_metadata():
+                other = existing.get("content_signature")
+                if other is None:
+                    old_pages = [_read_metadata(p) or {} for p in sorted(
+                        (_papers_dir() / existing["paper_id"] / "pages").glob("*.json"))]
+                    other = content_signature(old_pages)
+                score = overlap(signature, other)
+                identifiers = existing.get("identifiers") or {}
+                shared_id = bool(
+                    extracted["identifiers"].get("arxiv_id") and
+                    extracted["identifiers"]["arxiv_id"] == identifiers.get("arxiv_id")
+                    or extracted["identifiers"].get("doi") and
+                    extracted["identifiers"]["doi"].lower() == (identifiers.get("doi") or "").lower())
+                if shared_id or score >= 0.55:
+                    matches.append({"paper": _public_paper(existing), "score": round(score, 4),
+                                    "basis": "identifier_and_content" if shared_id and score >= .55 else
+                                             "identifier" if shared_id else "content_overlap"})
+            matches.sort(key=lambda m: m["score"], reverse=True)
+            if matches:
+                work_id = matches[0]["paper"]["work_id"]
+            if matches and conflict_action == "ask":
+                newest = max((m["paper"] for m in matches), key=lambda m: m.get("version_number") or -1)
+                return JSONResponse(status_code=409, content={
+                    "conflict": True, "incoming": {"filename": filename, "title": extracted["title"],
+                    "version_label": extracted["version_label"], "version_number": extracted["version_number"]},
+                    "matches": matches[:10], "latest": newest,
+                    "recommendation": "keep_existing_newer" if
+                    newest.get("version_number") is not None and extracted["version_number"] is not None
+                    and newest["version_number"] > extracted["version_number"]
+                    else "review_versions",
+                    "method_note": "正文五词片段重合率 + 标识核对；不是深层语义 embedding。"})
+            replacement = None
+            if conflict_action == "replace":
+                replacement = next((m["paper"] for m in matches if m["paper"]["paper_id"] == target_paper_id), None)
+                if replacement is None or replacement["sha256"] != target_sha256:
+                    raise HTTPException(409, "目标记录已变化或不是关联论文，请重新检查后选择。")
             chunks = build_chunks(
                 pages,
                 sections,
@@ -299,6 +345,8 @@ def upload_paper(file: UploadFile = File(...)) -> dict[str, Any]:
                 warnings=warnings,
             ).model_dump(mode="json")
 
+            metadata["content_signature"] = signature
+            metadata["match_method"] = matches[0]["basis"] if matches else None
             page_dir = staging_dir / "pages"
             page_dir.mkdir()
             for page in pages:
@@ -311,7 +359,20 @@ def upload_paper(file: UploadFile = File(...)) -> dict[str, Any]:
                 raise HTTPException(status_code=507, detail="Paper storage quota reached")
             destination = papers_dir / str(paper_id)
             os.replace(staging_dir, destination)
-            return _public_paper(metadata)
+            if replacement:
+                # Keep the previous source addressable for old evidence links.
+                old_path = _papers_dir() / replacement["paper_id"] / "metadata.json"
+                old_metadata = _read_metadata(old_path)
+                old_metadata.update(archived=True, replaced_by=str(paper_id))
+                try:
+                    _write_json(old_path.with_suffix(".tmp"), old_metadata)
+                    os.replace(old_path.with_suffix(".tmp"), old_path)
+                except OSError:
+                    shutil.rmtree(destination, ignore_errors=True)
+                    raise
+            result = _public_paper(metadata)
+            result["replaced_paper_id"] = replacement["paper_id"] if replacement else None
+            return result
     except HTTPException:
         raise
     except OSError as exc:
@@ -379,3 +440,30 @@ def get_paper_chunks(
         "items": chunks[offset : offset + limit],
         "total": len(chunks),
     }
+
+
+@router.get("/{paper_id}/source.pdf")
+def source_pdf(paper_id: uuid.UUID):
+    _load_paper(paper_id)
+    return FileResponse(_papers_dir()/str(paper_id)/"source.pdf", media_type="application/pdf",
+                        filename="source.pdf", content_disposition_type="inline")
+
+
+_RENDER_SLOT = threading.BoundedSemaphore(2)
+
+
+@router.get("/{paper_id}/render/{page_number}")
+def render_page(paper_id: uuid.UUID, page_number: int):
+    metadata = _load_paper(paper_id)
+    if not 1 <= page_number <= metadata["page_count"]:
+        raise HTTPException(404, "Page not found")
+    if not _RENDER_SLOT.acquire(blocking=False):
+        raise HTTPException(429, "页面渲染繁忙，请稍后重试。")
+    try:
+        with fitz.open(_papers_dir()/str(paper_id)/"source.pdf") as document:
+            page = document[page_number-1]
+            scale = min(1.8, 2200/max(page.rect.width, page.rect.height))
+            image = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes("png")
+        return Response(image, media_type="image/png")
+    finally:
+        _RENDER_SLOT.release()
