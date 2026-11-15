@@ -447,6 +447,82 @@
       .trim();
   }
 
+  function markdownTableCells(line) {
+    const value = String(line || "").trim();
+    if (!value.includes("|")) return null;
+    const cells = [];
+    let cell = "";
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === "|" && value[index - 1] !== "\\") {
+        cells.push(cell.trim());
+        cell = "";
+      } else {
+        cell += character;
+      }
+    }
+    cells.push(cell.trim());
+    if (value.startsWith("|") && cells[0] === "") cells.shift();
+    if (value.endsWith("|") && cells.at(-1) === "") cells.pop();
+    return cells.length > 1 ? cells : null;
+  }
+
+  function isMarkdownTableDivider(cells) {
+    return Boolean(cells?.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replaceAll(" ", ""))));
+  }
+
+  function cleanAnswerLabel(value) {
+    return String(value || "").trim().replace(/^\*\*(.+)\*\*$/, "$1").replace(/^__(.+)__$/, "$1");
+  }
+
+  function renderComparisonCards(headers, rows) {
+    const paperHeaders = headers.slice(1);
+    const cards = rows.map((row, index) => {
+      const aspect = cleanAnswerLabel(row[0]) || `比较项 ${index + 1}`;
+      const details = paperHeaders.map((paper, paperIndex) => {
+        const detail = String(row[paperIndex + 1] || "").trim();
+        if (!detail) return "";
+        return `<div class="answer-comparison-point"><strong>${escapeHtml(cleanAnswerLabel(paper))}</strong><span>${escapeHtml(detail)}</span></div>`;
+      }).filter(Boolean).join("");
+      return `<article class="answer-comparison-item"><h4>${escapeHtml(aspect)}</h4><div class="answer-comparison-points">${details}</div></article>`;
+    }).join("");
+    return `<div class="answer-comparison" aria-label="论文比较结果">${cards}</div>`;
+  }
+
+  function renderAnswerContent(value) {
+    const lines = String(value || "").split(/\r?\n/);
+    const blocks = [];
+    let paragraph = [];
+    const flushParagraph = () => {
+      const content = paragraph.join("\n").trim();
+      if (content) blocks.push(`<p>${escapeHtml(content).replaceAll("\n", "<br>")}</p>`);
+      paragraph = [];
+    };
+
+    for (let index = 0; index < lines.length;) {
+      const headers = markdownTableCells(lines[index]);
+      const divider = markdownTableCells(lines[index + 1]);
+      if (headers && isMarkdownTableDivider(divider) && headers.length === divider.length) {
+        flushParagraph();
+        const rows = [];
+        index += 2;
+        while (index < lines.length) {
+          const row = markdownTableCells(lines[index]);
+          if (!row) break;
+          rows.push(row);
+          index += 1;
+        }
+        if (rows.length) blocks.push(renderComparisonCards(headers, rows));
+        continue;
+      }
+      if (!lines[index].trim()) flushParagraph();
+      else paragraph.push(lines[index]);
+      index += 1;
+    }
+    flushParagraph();
+    return blocks.join("");
+  }
+
   function renderAnswer(payload) {
     elements.answerPanel.classList.remove("is-hidden");
     elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "本地工具编排";
@@ -484,7 +560,7 @@
     const formattedAnswer = answerTextForDisplay(payload.answer);
     const hasReadableAnswer = formattedAnswer.replace(/\[E\d+\]/gi, "").replace(/[\s\p{P}\p{S}]/gu, "").length > 0;
     const displayAnswer = hasReadableAnswer ? formattedAnswer : "详细公式请查看下方引用的论文原文。";
-    elements.answerResult.innerHTML = `<p>${escapeHtml(displayAnswer).replaceAll("\n", "<br>")}</p>`;
+    elements.answerResult.innerHTML = renderAnswerContent(displayAnswer);
     const citations = Array.isArray(payload.citations) ? payload.citations : [];
     elements.answerCitations.innerHTML = citations.map((item) => {
       const source = item.source || {};
