@@ -100,7 +100,12 @@
   }
 
   function paperAuthor(paper) {
-    return paper.author?.trim() || "未填写作者";
+    const authors = Array.isArray(paper.authors) && paper.authors.length
+      ? paper.authors
+      : String(paper.author || "").split(/[,;，；\n]+/);
+    const names = authors.map(name => String(name).trim()).filter(Boolean);
+    if (!names.length) return "未填写作者";
+    return names.slice(0, 5).join(", ") + (names.length > 5 ? ", etc" : "");
   }
 
   function paperVersion(paper) {
@@ -359,13 +364,13 @@
             <td>
               <button class="table-paper" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
                 <span class="table-paper-icon" aria-hidden="true">PDF</span>
-                <span><strong class="table-paper-title">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small></span>
+                <span class="table-paper-copy"><strong class="table-paper-title" title="${escapeHtml(paperTitle(paper))}">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file" title="${escapeHtml(paper.filename)}">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small></span>
               </button>
             </td>
-            <td>${escapeHtml(paperAuthor(paper))}</td>
-            <td>${paper.page_count} 页</td>
+            <td><span class="table-paper-authors" title="${escapeHtml(paperAuthor(paper))}">${escapeHtml(paperAuthor(paper))}</span></td>
+            <td class="table-nowrap">${paper.page_count} 页</td>
             <td><span class="status-badge ${status.className}">${status.label}</span></td>
-            <td>${formatDate(paper.created_at, true)}</td>
+            <td><span class="table-paper-date" title="${escapeHtml(formatDate(paper.created_at, true))}">${formatDate(paper.created_at)}</span></td>
             <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button><button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button></div></td>
           </tr>
         `;
@@ -1141,17 +1146,17 @@
           elements.uploadProgress.classList.add("is-hidden");
           elements.uploadResult.classList.remove("is-hidden");
           const newer = conflict.recommendation === "keep_existing_newer";
-          elements.uploadResult.innerHTML = `<div class="result-card"><div class="result-copy">
+          elements.uploadResult.innerHTML = `<div class="result-card version-conflict"><div class="result-copy">
             <span class="section-kicker">发现关联论文 · 尚未入库</span>
             <h3>${newer ? "资料库中已有更新版本" : "请确认如何保存这份资料"}</h3>
-            <p>本次：${escapeHtml(conflict.incoming.filename)} ${escapeHtml(conflict.incoming.version_label || "版本未知")}</p>
-            ${conflict.matches.map(m => `<p>${escapeHtml(paperTitle(m.paper))} · ${escapeHtml(m.paper.version_label || "版本未知")} · ${m.basis === "content_overlap" ? "正文相似" : "论文标识匹配"} · 正文重合率 ${Math.round(m.score * 100)}%</p>`).join("")}
+            <p class="conflict-incoming">本次：${escapeHtml(conflict.incoming.filename)} · ${escapeHtml(conflict.incoming.version_label || "版本未知")}</p>
+            <div class="conflict-matches">${conflict.matches.map(m => `<article class="conflict-match"><strong>${escapeHtml(paperTitle(m.paper))}</strong><span>${escapeHtml(m.paper.version_label || "版本未知")} · ${m.basis === "content_overlap" ? "正文相似" : m.basis === "identifier_and_content" ? "标识与正文匹配" : "论文标识匹配"} · 正文重合率 ${Math.round(m.score * 100)}%</span></article>`).join("")}</div>
             <p>${newer ? "建议保留库中新版。可取消本次导入，或保留两版用于对照。" : "相似内容可能属于不同工作，请先核对再选择。"}</p>
-            <div class="result-actions"><button class="primary-button" data-version-action="cancel">保留原记录，取消导入</button>
-            <button class="secondary-button" data-version-action="keep_both">两版都保留</button></div>
-            <details><summary>替换指定记录</summary><p>目标将退出论文库，旧文件继续保留供历史引用查看。上传旧版会使当前库使用旧版，请谨慎确认。</p>
+            <div class="result-actions"><button class="primary-button" type="button" data-version-action="cancel">取消本次导入</button>
+            <button class="secondary-button" type="button" data-version-action="keep_both">保留两个版本</button></div>
+            <details class="conflict-replace"><summary>替换指定记录</summary><p>目标将退出论文库，旧文件继续保留供历史引用查看。上传旧版会使当前库使用旧版，请谨慎确认。</p>
             <select id="replaceTarget">${conflict.matches.map(m => `<option value="${escapeHtml(m.paper.paper_id)}">${escapeHtml(m.paper.filename)} ${escapeHtml(m.paper.version_label || "")}</option>`).join("")}</select>
-            <button class="secondary-button" data-version-action="replace">确认替换所选记录</button></details>
+            <button class="secondary-button" type="button" data-version-action="replace">确认替换所选记录</button></details>
           </div></div>`;
           return;
         }
