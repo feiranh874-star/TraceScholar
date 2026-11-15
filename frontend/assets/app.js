@@ -684,6 +684,8 @@
     elements.answerCitations.innerHTML = "";
     elements.agentTrace.hidden = true;
     elements.agentSteps.innerHTML = "";
+    elements.evidenceCount.textContent = "正在检索证据并生成回答";
+    elements.evidenceResults.innerHTML = '<div class="evidence-empty is-loading"><span>正在定位原文并生成回答…</span></div>';
     try {
       const selectedPaperId = elements.researchPaperScope.value;
       const response = await fetch("/api/research/agent", {
@@ -699,6 +701,8 @@
       const message = friendlyError(error, "证据回答生成失败，请稍后重试。");
       elements.answerModel.textContent = "生成失败";
       elements.answerResult.innerHTML = `<div class="answer-insufficient is-error"><strong>无法生成回答</strong><span>${escapeHtml(message)}</span></div>`;
+      elements.evidenceCount.textContent = "本次问答未完成";
+      elements.evidenceResults.innerHTML = '<div class="evidence-empty is-error"><strong>本次未取得完整结果</strong><span>回答生成已停止。你可以重试原问题，或选择“只检索原文”查看证据。</span></div>';
       showToast(message, "error");
     } finally {
       state.answering = false;
@@ -749,6 +753,8 @@
       const message = friendlyError(error, "多论文比较失败，请稍后重试。");
       elements.answerModel.textContent = "比较失败";
       elements.answerResult.innerHTML = `<div class="answer-insufficient is-error"><strong>无法完成比较</strong><span>${escapeHtml(message)}</span></div>`;
+      elements.evidenceCount.textContent = "本次比较未完成";
+      elements.evidenceResults.innerHTML = '<div class="evidence-empty is-error"><strong>本次未取得完整结果</strong><span>比较生成已停止。你可以保留所选论文，直接重试原问题。</span></div>';
       showToast(message, "error");
     } finally {
       state.answering = false;

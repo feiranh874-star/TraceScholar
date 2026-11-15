@@ -215,6 +215,12 @@ def test_chinese_training_objective_comparison_retrieves_source_aligned_passages
     assert "GPT-3 autoregressive language model objective" in observed_queries[1]
 
 
+def test_clip_method_comparison_keeps_mechanism_terms_in_search():
+    question = "比较 CLIP 如何进行 zero-shot image classification，以及 GPT-3 的 few-shot 方法"
+    query = research._comparison_query_for_paper(question, {"filename": "2103.00020v1.pdf"})
+    assert "how image classification image encoder text encoder cosine similarity softmax" in query
+
+
 def test_compare_stops_if_any_selected_paper_has_no_evidence(client, monkeypatch):
     attention = upload(client, "Attention", "Attention compares query and key vectors to calculate weights.")
     biology = upload(client, "Biology", "Proteins fold into stable structures through chemical interactions.")
@@ -430,9 +436,20 @@ def test_answer_reports_external_service_failure(client, monkeypatch):
 
 @pytest.mark.parametrize(
     "answer_mode, expected_output_limit",
-    [("general", 800), ("comparison", 2000)],
+    [("general", 800), ("comparison", 4000)],
 )
-def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch, answer_mode, expected_output_limit):
+@pytest.mark.parametrize(
+    "base_url, model, disables_thinking",
+    [
+        ("https://api.deepseek.com", "deepseek-flash", True),
+        ("https://api.deepseek.com/v1", "deepseek-v4-pro", True),
+        ("https://api.deepseek.com", "deepseek-reasoner", False),
+        ("https://compatible.example/v1", "deepseek-flash", False),
+    ],
+)
+def test_deepseek_request_limits_output_and_keeps_key_out_of_body(
+    monkeypatch, answer_mode, expected_output_limit, base_url, model, disables_thinking,
+):
     evidence = RetrievalEvidenceRecord(
         evidence_id="paper:chunk", text="Query and key determine attention weights.",
         source=SourceReference(paper_id="paper", work_id="work", page_start=1, page_end=1),
@@ -459,23 +476,28 @@ def test_deepseek_request_limits_output_and_keeps_key_out_of_body(monkeypatch, a
     monkeypatch.setattr("app.llm.urllib.request.urlopen", fake_urlopen)
     answer = generate_grounded_answer(
         "How are attention weights computed?", [evidence],
-        base_url="https://api.deepseek.com", api_key="test-only-key",
-        model="deepseek-flash", timeout_seconds=12, answer_mode=answer_mode,
+        base_url=base_url, api_key="test-only-key",
+        model=model, timeout_seconds=12, answer_mode=answer_mode,
     )
 
     assert answer == "Query and key [E1]."
-    assert observed["request"].full_url == "https://api.deepseek.com/chat/completions"
+    assert observed["request"].full_url == f"{base_url}/chat/completions"
     assert observed["request"].get_header("Authorization") == "Bearer test-only-key"
     assert observed["timeout"] == 12
     assert isinstance(observed["context"], ssl.SSLContext)
     assert observed["context"].verify_mode == ssl.CERT_REQUIRED
     payload = json.loads(observed["request"].data)
     assert payload["max_tokens"] == expected_output_limit
-    assert payload["model"] == "deepseek-flash"
+    assert payload["model"] == model
+    if disables_thinking:
+        assert payload["thinking"] == {"type": "disabled"}
+    else:
+        assert "thinking" not in payload
     assert "test-only-key" not in observed["request"].data.decode()
 
 
-def test_deepseek_empty_response_reports_output_limit_without_exposing_reasoning(monkeypatch):
+@pytest.mark.parametrize("final_content", ["", "A partial claim [E1] but"])
+def test_deepseek_truncated_response_is_rejected_without_exposing_reasoning(monkeypatch, final_content):
     class Response:
         def __enter__(self):
             return self
@@ -484,10 +506,12 @@ def test_deepseek_empty_response_reports_output_limit_without_exposing_reasoning
             pass
 
         def read(self):
-            return (
-                b'{"choices":[{"message":{"content":"",'
-                b'"reasoning_content":"private reasoning"},"finish_reason":"length"}]}'
-            )
+            return json.dumps({
+                "choices": [{
+                    "message": {"content": final_content, "reasoning_content": "private reasoning"},
+                    "finish_reason": "length",
+                }],
+            }).encode()
 
     monkeypatch.setattr("app.llm.urllib.request.urlopen", lambda *args, **kwargs: Response())
     with pytest.raises(LLMServiceError) as error:
@@ -497,7 +521,8 @@ def test_deepseek_empty_response_reports_output_limit_without_exposing_reasoning
             model="deepseek-flash", answer_mode="comparison",
         )
 
-    assert "达到长度上限" in str(error.value)
+    assert "回答未完成" in str(error.value)
+    assert "无需修改原问题" in str(error.value)
     assert "private reasoning" not in str(error.value)
 
 
@@ -545,6 +570,7 @@ def test_grounded_prompt_marks_evidence_as_untrusted_data():
 
     assert "untrusted reference material" in messages[0]["content"]
     assert "Never invent" in messages[0]["content"]
+    assert "do not attribute their methods to the paper's own model" in messages[0]["content"]
     assert "do not reproduce equations, raw LaTeX" in messages[0]["content"]
     assert "[E1]" in messages[1]["content"]
     assert "<evidence>" in messages[1]["content"]

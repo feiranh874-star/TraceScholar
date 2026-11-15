@@ -75,6 +75,7 @@ def _comparison_query_for_paper(question: str, paper: dict) -> str:
     asks_training = any(term in normalized_question for term in ("训练", "预训练", "training", "objective"))
     asks_data = any(term in normalized_question for term in ("数据", "dataset", "data"))
     asks_transfer = any(term in normalized_question for term in ("迁移", "下游", "transfer", "few-shot", "zero-shot"))
+    asks_method = any(term in normalized_question for term in ("如何", "怎么", "怎样", "how", "method"))
 
     aliases = []
     if "learning transferable visual models" in title or "2103.00020" in title:
@@ -84,6 +85,8 @@ def _comparison_query_for_paper(question: str, paper: dict) -> str:
             aliases.append("image text pairs internet dataset")
         if asks_transfer:
             aliases.append("zero-shot transfer without supervised adaptation")
+            if asks_method:
+                aliases.append("how image classification image encoder text encoder cosine similarity softmax")
     elif (
         "language models are few-shot learners" in title
         or "语言模型是少样本学习器" in title
