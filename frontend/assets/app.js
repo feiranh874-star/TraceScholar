@@ -13,8 +13,6 @@
   const state = {
     papers: [],
     total: 0,
-    currentPaper: null,
-    currentPage: 1,
     activeView: "overview",
     uploading: false,
     pendingUpload: null,
@@ -22,8 +20,6 @@
     answering: false,
     comparisonMode: false,
     comparisonPaperIds: [],
-    drawerReturnFocus: null,
-    detailRequestId: 0,
     deletingPaperId: null,
   };
 
@@ -72,18 +68,7 @@
     evidenceCount: byId("evidenceCount"),
     evidenceResults: byId("evidenceResults"),
     toastRegion: byId("toastRegion"),
-    drawer: byId("paperDrawer"),
-    drawerBackdrop: byId("drawerBackdrop"),
-    closeDrawer: byId("closeDrawer"),
-    drawerTitle: byId("drawerTitle"),
-    drawerMetadata: byId("drawerMetadata"),
-    drawerWarning: byId("drawerWarning"),
-    readerPageLabel: byId("readerPageLabel"),
-    pageNumber: byId("pageNumber"),
-    pageTotal: byId("pageTotal"),
-    prevPage: byId("prevPage"),
-    nextPage: byId("nextPage"),
-    pageText: byId("pageText"),
+
   };
 
   function escapeHtml(value) {
@@ -835,7 +820,6 @@
     try {
       const response = await fetch(`/api/papers/${encodeURIComponent(paperId)}`, { method: "DELETE" });
       if (!response.ok) throw await responseError(response);
-      if (state.currentPaper?.paper_id === paperId) { closeDrawer(); state.currentPaper = null; }
       state.papers = state.papers.filter(item => item.paper_id !== paperId);
       state.total = Math.max(0, state.total - 1);
       state.comparisonPaperIds = state.comparisonPaperIds.filter(id => id !== paperId);
@@ -858,203 +842,10 @@
     }
   }
 
-  function renderMetadata(paper) {
-    const status = statusInfo(paper.parse_status);
-    const items = [
-      ["作者", paperAuthor(paper)],
-      ["原始文件", paper.filename],
-      ["页数", `${paper.page_count} 页`],
-      ["arXiv", paper.arxiv_id || "未识别"],
-      ["版本", paperVersion(paper) || "未识别"],
-      ["章节 / 文本块", `${paper.section_count || 0} / ${paper.chunk_count || 0}`],
-      ["解析状态", status.label],
-      ["导入时间", formatDate(paper.created_at, true)],
-      ["文件指纹", paper.sha256 ? paper.sha256.slice(0, 12) + "…" : "未生成"],
-    ];
-    elements.drawerMetadata.innerHTML = items
-      .map(([label, value]) => `<div class="metadata-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
-      .join("");
-
-    const warnings = Array.isArray(paper.warnings) ? paper.warnings.map(localizeWarning) : [];
-    const relationNotice = versionRelationNotice(paper);
-    if (relationNotice) warnings.unshift(relationNotice);
-    if (warnings.length) {
-      elements.drawerWarning.classList.remove("is-hidden");
-      elements.drawerWarning.innerHTML = `<strong>解析与版本提示</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`;
-    } else {
-      elements.drawerWarning.classList.add("is-hidden");
-      elements.drawerWarning.innerHTML = "";
-    }
-  }
-
-  async function openPaper(paperId, trigger = document.activeElement, initialPage = 1) {
-    const requestId = ++state.detailRequestId;
-    state.currentPaper = null;
-    state.drawerReturnFocus = trigger instanceof HTMLElement ? trigger : null;
-    const listedPaper = state.papers.find((paper) => paper.paper_id === paperId);
-    elements.drawerTitle.textContent = listedPaper ? paperTitle(listedPaper) : "正在读取论文…";
-    elements.drawer.classList.add("is-open");
-    elements.drawerBackdrop.classList.add("is-visible");
-    elements.drawer.setAttribute("aria-hidden", "false");
-    elements.drawer.setAttribute("role", "dialog");
-    elements.drawer.setAttribute("aria-modal", "true");
-    document.body.classList.add("drawer-open");
-    elements.drawerMetadata.innerHTML = "";
-    elements.drawerWarning.classList.add("is-hidden");
-    elements.drawerWarning.innerHTML = "";
-    elements.prevPage.disabled = true;
-    elements.nextPage.disabled = true;
-    elements.pageNumber.disabled = true;
-    elements.pageText.innerHTML = '<div class="reader-placeholder is-loading">正在读取论文详情…</div>';
-    window.setTimeout(() => elements.closeDrawer.focus(), 80);
-
-    try {
-      const response = await fetch(`/api/papers/${encodeURIComponent(paperId)}`, { headers: { Accept: "application/json" } });
-      if (!response.ok) throw await responseError(response);
-      const paper = await response.json();
-      if (requestId !== state.detailRequestId) return;
-      state.currentPaper = paper;
-      state.currentPage = Math.min(paper.page_count, Math.max(1, Number(initialPage) || 1));
-      elements.pageNumber.disabled = false;
-      elements.drawerTitle.textContent = paperTitle(paper);
-      elements.pageNumber.max = String(paper.page_count);
-      elements.pageTotal.textContent = `/ ${paper.page_count}`;
-      renderMetadata(paper);
-      const original = `/api/papers/${encodeURIComponent(paperId)}/source.pdf`;
-      byId("originalPdfLink").href = original;
-      byId("ocrButton").disabled = false;
-      byId("ocrButton").hidden = !paper.needs_ocr_pages?.length;
-      byId("ocrStatus").textContent = paper.needs_ocr_pages?.length ? `还有 ${paper.needs_ocr_pages.length} 页待识别；OCR 不调用大模型。` : "";
-      byId("translationResult").textContent = "";
-      byId("translationSource").value = "";
-      const structureResponse = await fetch(`/api/papers/${encodeURIComponent(paperId)}/structure`);
-      if (requestId !== state.detailRequestId) return;
-      const structure = structureResponse.ok ? await structureResponse.json() : {};
-      byId("sectionSelect").innerHTML = '<option value="">选择章节</option>' + (structure.sections || []).map(section => `<option value="${section.page_start}">${escapeHtml(section.title)} · 第 ${section.page_start} 页</option>`).join("");
-      await loadPage(state.currentPage);
-      if (paper.needs_ocr_pages?.length) pollOcr(paperId);
-    } catch (error) {
-      if (requestId !== state.detailRequestId) return;
-      const message = friendlyError(error, "论文详情读取失败。");
-      elements.pageText.innerHTML = `<div class="reader-placeholder is-error">${escapeHtml(message)}</div>`;
-      showToast(message, "error");
-    }
-  }
-
-  function closeDrawer() {
-    state.detailRequestId += 1;
-    window.clearTimeout(state.ocrPoll);
-    byId("originalPdfImage").removeAttribute("src");
-    elements.drawer.classList.remove("is-open");
-    elements.drawerBackdrop.classList.remove("is-visible");
-    elements.drawer.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("drawer-open");
-    const focusTarget = state.drawerReturnFocus;
-    state.drawerReturnFocus = null;
-    if (focusTarget?.isConnected) focusTarget.focus();
-  }
-
-  function updatePageControls(page) {
-    const total = Number(state.currentPaper?.page_count) || 1;
-    elements.pageNumber.value = String(page);
-    elements.readerPageLabel.textContent = `第 ${page} 页`;
-    elements.prevPage.disabled = page <= 1;
-    elements.nextPage.disabled = page >= total;
-  }
-
-  async function loadPage(pageNumber) {
-    if (!state.currentPaper) return;
-    const total = Number(state.currentPaper.page_count) || 1;
-    const page = Math.min(total, Math.max(1, Number(pageNumber) || 1));
-    const requestedPaperId = state.currentPaper.paper_id;
-    state.currentPage = page;
-    byId("originalPdfImage").src = `/api/papers/${encodeURIComponent(requestedPaperId)}/render/${page}`;
-    byId("translationSource").value = "";
-    byId("translationResult").textContent = "";
-    updatePageControls(page);
-    elements.pageText.classList.remove("needs-ocr");
-    elements.pageText.innerHTML = '<div class="reader-placeholder is-loading">正在读取本页原文…</div>';
-
-    try {
-      const response = await fetch(`/api/papers/${encodeURIComponent(requestedPaperId)}/pages/${page}`, { headers: { Accept: "application/json" } });
-      if (!response.ok) throw await responseError(response);
-      const payload = await response.json();
-      if (state.currentPaper?.paper_id !== requestedPaperId || state.currentPage !== page) return;
-      if (payload.text?.trim()) {
-        elements.pageText.textContent = payload.text;
-        elements.pageText.classList.toggle("needs-ocr", Boolean(payload.needs_ocr));
-      } else {
-        elements.pageText.classList.add("needs-ocr");
-        elements.pageText.innerHTML = `
-          <div class="page-empty page-ocr">
-            <strong>本页没有可读取的文字</strong>
-            <span>这可能是扫描页，可点击上方“识别扫描页”取得可检索文字。</span>
-          </div>
-        `;
-      }
-    } catch (error) {
-      elements.pageText.innerHTML = `<div class="reader-placeholder is-error">${escapeHtml(friendlyError(error, "本页读取失败。"))}</div>`;
-    }
-  }
-
-  async function pollOcr(paperId) {
-    if (state.currentPaper?.paper_id !== paperId || !elements.drawer.classList.contains("is-open")) return;
-    try {
-      const response = await fetch(`/api/papers/${paperId}/ocr`);
-      if (!response.ok) throw await responseError(response);
-      const job = await response.json();
-      if (state.currentPaper?.paper_id !== paperId) return;
-      if (job.status === "idle") return;
-      byId("ocrStatus").textContent = job.status === "running"
-        ? `OCR 正在处理：${job.processed || 0} / ${job.total} 页（实际已处理页数）`
-        : `${({done: "OCR 完成", partial: "部分页面未识别", failed: "OCR 未完成", interrupted: "OCR 已中断"})[job.status] || "等待识别"}。${job.message || ""} ${job.failed_pages?.map(p => `第 ${p.page} 页：${p.message}`).join("；") || ""}`;
-      byId("ocrButton").disabled = job.status === "running";
-      if (job.status === "running") state.ocrPoll = window.setTimeout(() => pollOcr(paperId), 1500);
-      else {
-        await loadPapers({ quiet: true });
-        const current = state.papers.find(p => p.paper_id === paperId);
-        if (current) { state.currentPaper = current; renderMetadata(current); byId("ocrButton").hidden = !current.needs_ocr_pages?.length; }
-        await loadPage(state.currentPage);
-      }
-    } catch (error) {
-      byId("ocrButton").disabled = false;
-      byId("ocrStatus").textContent = friendlyError(error, "无法读取 OCR 状态，可稍后重新查看。");
-    }
-  }
-
-  async function startOcr() {
-    const paperId = state.currentPaper?.paper_id;
-    if (!paperId) return;
-    byId("ocrButton").disabled = true;
-    try {
-      const response = await fetch(`/api/papers/${paperId}/ocr`, { method: "POST" });
-      if (!response.ok) throw await responseError(response);
-      await pollOcr(paperId);
-    } catch (error) {
-      byId("ocrButton").disabled = false;
-      byId("ocrStatus").textContent = friendlyError(error, "OCR 启动失败。");
-    }
-  }
-
-  async function translateParagraph() {
-    const paperId = state.currentPaper?.paper_id;
-    if (!paperId) return;
-    const page = state.currentPage;
-    const selection = window.getSelection();
-    const selectedText = selection && elements.pageText.contains(selection.anchorNode) ? selection.toString().trim() : "";
-    const text = selectedText || byId("translationSource").value.trim();
-    if (!text) { showToast("请先在分页文字中选中一段原文，或粘贴本页连续原文。", "error"); return; }
-    byId("translationSource").value = text;
-    byId("translateButton").disabled = true;
-    byId("translationResult").textContent = "正在翻译…";
-    try {
-      const response = await fetch(`/api/papers/${paperId}/translate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page, text, target: byId("translationTarget").value }) });
-      if (!response.ok) throw await responseError(response);
-      const result = await response.json();
-      if (state.currentPaper?.paper_id === paperId && state.currentPage === page) byId("translationResult").textContent = result.translation;
-    } catch (error) {
-      if (state.currentPaper?.paper_id === paperId && state.currentPage === page) byId("translationResult").textContent = friendlyError(error, "翻译失败。");
-    } finally { byId("translateButton").disabled = false; }
+  function openPaper(paperId, trigger = null, initialPage = 1) {
+    const page = Math.max(1, Math.trunc(Number(initialPage)) || 1);
+    const query = new URLSearchParams({ page: String(page), from: state.activeView });
+    window.location.assign(`/reader/${encodeURIComponent(paperId)}?${query}`);
   }
 
   function validateUpload(file) {
@@ -1090,7 +881,9 @@
     const relationNotice = versionRelationNotice(paper);
     const duplicateText = paper.duplicate
       ? "这篇论文已经在资料库中，本次未重复保存。"
-      : relationNotice || "论文已保存，并完成逐页文本提取。";
+      : paper.needs_ocr_pages?.length
+        ? `文件已保存，${paper.needs_ocr_pages.length} 页扫描文字待识别。点击“查看原文”，在阅读页启动 OCR。`
+        : relationNotice || "论文已保存，并完成逐页文本提取。";
     elements.uploadResult.innerHTML = `
       <div class="result-card result-success">
         <span class="result-icon" aria-hidden="true">✓</span>
@@ -1406,49 +1199,13 @@
       if (event.target.closest("[data-retry-load]")) loadPapers();
     });
 
-    byId("readerZoom").addEventListener("input", event => {
-      byId("originalPdfImage").style.width = `${event.target.value}%`;
-      byId("readerZoomLabel").textContent = `${event.target.value}%`;
-    });
-    byId("originalPdfImage").addEventListener("error", () => showToast("本页原版预览加载失败，可在新窗口打开 PDF。", "error"));
-    byId("ocrButton").addEventListener("click", startOcr);
-    byId("translateButton").addEventListener("click", translateParagraph);
-    byId("sectionSelect").addEventListener("change", event => { if (event.target.value) loadPage(event.target.value); });
-    elements.closeDrawer.addEventListener("click", closeDrawer);
-    elements.drawerBackdrop.addEventListener("click", closeDrawer);
-    elements.prevPage.addEventListener("click", () => loadPage(state.currentPage - 1));
-    elements.nextPage.addEventListener("click", () => loadPage(state.currentPage + 1));
-    elements.pageNumber.addEventListener("change", () => loadPage(elements.pageNumber.value));
-    elements.pageNumber.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        loadPage(elements.pageNumber.value);
-      }
-    });
-
     document.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
         elements.searchInput.focus();
         elements.searchInput.select();
       }
-      if (event.key === "Escape") {
-        if (elements.drawer.classList.contains("is-open")) closeDrawer();
-        else closeMobileNavigation();
-      }
-      if (event.key === "Tab" && elements.drawer.classList.contains("is-open")) {
-        const focusable = all('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])', elements.drawer);
-        if (!focusable.length) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
+      if (event.key === "Escape") closeMobileNavigation();
     });
 
     document.querySelector(".workspace").addEventListener("click", (event) => {
@@ -1458,7 +1215,8 @@
 
   async function initialize() {
     bindEvents();
-    navigateTo("overview");
+    const initialView = new URLSearchParams(window.location.search).get("view");
+    navigateTo(Object.hasOwn(viewLabels, initialView) ? initialView : "overview");
     await Promise.all([checkHealth(), loadPapers()]);
   }
 

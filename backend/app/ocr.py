@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 import pymupdf
@@ -21,6 +22,8 @@ _SLOT = threading.BoundedSemaphore(1)
 
 
 def _atomic(path, value):
+    if 'status' in value:
+        value['updated_at'] = time.time()
     temporary = path.with_suffix('.tmp')
     papers._write_json(temporary, value)
     os.replace(temporary, path)
@@ -41,16 +44,35 @@ def engine_command() -> list[str]:
     raise RuntimeError('未找到 OCR 引擎。Linux 请安装 tesseract-ocr；macOS 需 Xcode Command Line Tools。')
 
 
-def recognize(page, command: list[str]) -> str:
+def recognize(page, command: list[str], on_rendered=None) -> str:
     scale = min(2.0, 2200/max(page.rect.width, page.rect.height))
     with tempfile.TemporaryDirectory(prefix='tracescholar-ocr-') as temp:
         image = Path(temp) / 'page.png'
-        page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False).save(image)
+        page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), colorspace=pymupdf.csGRAY, alpha=False).save(image)
+        if on_rendered:
+            on_rendered()
         args = [*command, str(image)]
         if command[0] == 'tesseract':
             args += ['stdout', '-l', os.getenv('OCR_LANGUAGES', 'eng'), '--psm', '3']
-        result = subprocess.run(args, check=True, capture_output=True, timeout=90)
+        # Small CPU instances can stall when Tesseract creates many OpenMP threads.
+        environment = {**os.environ, 'OMP_THREAD_LIMIT': '1', 'OMP_NUM_THREADS': '1'}
+        result = subprocess.run(args, check=True, capture_output=True, timeout=90, env=environment)
         return result.stdout.decode('utf-8').strip()
+
+
+def _page_error(error):
+    if isinstance(error, RuntimeError):
+        return str(error)
+    if isinstance(error, subprocess.TimeoutExpired):
+        return '识别引擎超过 90 秒未返回，该页可稍后重试。'
+    if isinstance(error, subprocess.CalledProcessError):
+        diagnostic = (error.stderr or b'').decode('utf-8', errors='replace').lower()
+        if 'traineddata' in diagnostic or 'failed loading language' in diagnostic:
+            return 'OCR 语言包缺失或不可读，请检查 OCR_LANGUAGES 与已安装语言包。'
+        if error.returncode in (-9, 137):
+            return 'OCR 引擎被终止，可能是实例内存不足；请检查服务日志。'
+        return 'OCR 引擎执行失败（退出码 ' + str(error.returncode) + '），请检查服务日志或重试。'
+    return 'OCR 页面处理失败，可重试该页。'
 
 
 def _reindex(paper_id):
@@ -77,6 +99,8 @@ def run_ocr(paper_id: str, job: dict):
     directory = papers._papers_dir()/paper_id
     path = directory/'ocr-job.json'
     try:
+        job.update(phase='preparing', current_page=None)
+        _atomic(path, job)
         command = engine_command()
         job['engine'] = 'tesseract' if command[0] == 'tesseract' else 'macOS Vision'
         _atomic(path, job)
@@ -87,7 +111,12 @@ def run_ocr(paper_id: str, job: dict):
                 if not record.get('needs_ocr'):
                     continue
                 try:
-                    text = recognize(document[number-1], command)
+                    job.update(phase='rendering', current_page=number)
+                    _atomic(path, job)
+                    def rendered():
+                        job['phase'] = 'recognizing'
+                        _atomic(path, job)
+                    text = recognize(document[number-1], command, on_rendered=rendered)
                     if len(text) < papers.MIN_PAGE_TEXT_CHARS:
                         raise RuntimeError('该页识别文字不足，可能为空白页或图表页。')
                     record.update(text=text, char_count=len(text), needs_ocr=False, text_origin='ocr', ocr_engine=job['engine'])
@@ -97,19 +126,23 @@ def run_ocr(paper_id: str, job: dict):
                     _atomic(page_path, record)
                     job['completed_pages'].append(number)
                 except (RuntimeError, subprocess.SubprocessError, OSError) as error:
-                    job['failed_pages'].append({'page': number, 'message': str(error) if isinstance(error, RuntimeError) else 'OCR 引擎执行失败，可重试该页。'})
+                    job['failed_pages'].append({'page': number, 'message': _page_error(error)})
                 job['processed'] += 1
                 _atomic(path, job)
+        job.update(phase='indexing', current_page=None)
+        _atomic(path, job)
         _reindex(paper_id)
         job['status'] = 'partial' if job['failed_pages'] else 'done'
     except Exception as error:
         job['status'] = 'failed'
-        job['message'] = str(error) if isinstance(error, RuntimeError) else 'OCR 未完成，已保存成功页，可重试。'
+        job['message'] = _page_error(error)
         try:
             _reindex(paper_id)
         except Exception:
             pass
     finally:
+        job['phase'] = 'finished'
+        job['finished_at'] = time.time()
         try:
             _atomic(path, job)
         finally:
@@ -126,7 +159,10 @@ def ocr_status(paper_id: uuid.UUID):
         job = {**job, 'status': 'interrupted', 'message': '服务中断，点击继续识别可跳过已完成页。'}
     remaining = [page['page'] for path in sorted((papers._papers_dir()/str(paper_id)/'pages').glob('*.json'))
                  if (page := papers._read_metadata(path)) and page.get('needs_ocr')]
-    return {**job, 'remaining_pages': remaining}
+    now = time.time()
+    return {**job, 'remaining_pages': remaining,
+            'elapsed_seconds': max(0, job.get('finished_at', now)-job.get('started_at', now)),
+            'stalled': job.get('status') == 'running' and now-job.get('updated_at', now) > 45}
 
 
 @router.post('/{paper_id}/ocr', status_code=202)
@@ -143,7 +179,7 @@ def start_ocr(paper_id: uuid.UUID, background: BackgroundTasks):
         if not _SLOT.acquire(blocking=False):
             raise HTTPException(409, '已有 OCR 任务运行，请等待完成后重试。')
         _ACTIVE.add(str(paper_id))
-    job = {'status': 'running', 'requested_pages': remaining, 'total': len(remaining),
+    job = {'status': 'running', 'phase': 'preparing', 'started_at': time.time(), 'requested_pages': remaining, 'total': len(remaining),
            'processed': 0, 'completed_pages': [], 'failed_pages': []}
     try:
         _atomic(papers._papers_dir()/str(paper_id)/'ocr-job.json', job)

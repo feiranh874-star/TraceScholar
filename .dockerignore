@@ -11,6 +11,7 @@
 !backend/app/native/*.swift
 !frontend/
 !frontend/index.html
+!frontend/reader.html
 !frontend/assets/
 !frontend/assets/*.css
 !frontend/assets/*.js

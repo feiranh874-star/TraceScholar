@@ -54,3 +54,14 @@ def test_unknown_api_path_keeps_json_404():
     assert response.status_code == 404
     assert response.headers["content-type"].startswith("application/json")
     assert response.json() == {"detail": "Not Found"}
+
+
+def test_reader_has_dedicated_refreshable_page_and_assets():
+    response = client.get('/reader/00000000-0000-0000-0000-000000000001?page=4')
+    assert response.status_code == 200
+    assert '适应整页' in response.text and '返回论文库' in response.text
+    assert 'reader-canvas' in response.text and 'drawer-backdrop' not in response.text
+    assert client.get('/assets/reader.js').status_code == 200
+    assert client.get('/assets/reader.css').status_code == 200
+    assert 'paperDrawer' not in client.get('/').text
+    assert client.get('/reader/not-a-uuid').status_code == 422

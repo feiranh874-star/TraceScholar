@@ -28,13 +28,14 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def upload_sample(client: TestClient, filename: str):
+def upload_sample(client: TestClient, filename: str, **fields):
     sample = SAMPLE_DIR / filename
     assert sample.is_file(), f"Missing organizer sample: {filename}"
     with sample.open("rb") as stream:
         return client.post(
             "/api/papers",
             files={"file": (sample.name, stream, "application/pdf")},
+            data=fields,
         )
 
 
@@ -69,6 +70,20 @@ def test_image_only_version_is_marked_for_ocr(client):
     assert paper["parse_status"] == "needs_ocr"
     assert len(paper["needs_ocr_pages"]) == paper["page_count"] == 15
     assert paper["chunk_count"] == 0
+
+
+def test_scan_still_prompts_version_conflict_before_ocr(client):
+    latest = upload_sample(client, '1706.03762v7.pdf').json()
+    response = upload_sample(client, '1706.03762v1_img.pdf', conflict_action='ask')
+    assert response.status_code == 409
+    conflict = response.json()
+    assert conflict['recommendation'] == 'keep_existing_newer'
+    assert conflict['matches'][0]['paper']['paper_id'] == latest['paper_id']
+    assert client.get('/api/papers').json()['total'] == 1
+    kept = upload_sample(client, '1706.03762v1_img.pdf', conflict_action='keep_both')
+    assert kept.status_code == 201
+    assert kept.json()['work_id'] == latest['work_id']
+    assert kept.json()['needs_ocr_pages'] == list(range(1, 16))
 
 
 def test_long_book_parses_all_pages(client):

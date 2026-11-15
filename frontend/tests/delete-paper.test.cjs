@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../assets/app.js'), 'utf8');
 const start = source.indexOf('  async function deletePaper(');
-const end = source.indexOf('\n  function renderMetadata(', start);
+const end = source.indexOf('\n  function openPaper(', start);
 assert.ok(start >= 0 && end > start);
 
 function harness({ confirm = true, failure = false } = {}) {
@@ -45,7 +45,7 @@ test('successful deletion clears only the selected record and updates dependent 
   assert.deepEqual(Array.from(h.state.comparisonPaperIds), ['v7']);
   assert.equal(h.elements.researchPaperScope.value, '');
   assert.equal(h.state.total, 1);
-  assert.equal(h.closed, true);
+  assert.equal(h.closed, false);
   assert.equal(h.refreshed, true);
   assert.equal(h.state.deletingPaperId, null);
 });

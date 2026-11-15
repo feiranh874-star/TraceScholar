@@ -1,6 +1,7 @@
 """TraceScholar API and local frontend entry point."""
 
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -33,6 +34,11 @@ def frontend_home() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
+def frontend_reader(paper_id: UUID) -> FileResponse:
+    """Serve a dedicated, refreshable reading page rather than a drawer."""
+    return FileResponse(FRONTEND_DIR / "reader.html")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.validate()
@@ -57,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if ASSETS_DIR.exists():
         application.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="frontend-assets")
     application.add_api_route("/", frontend_home, include_in_schema=False)
+    application.add_api_route("/reader/{paper_id}", frontend_reader, include_in_schema=False)
     return application
 
 

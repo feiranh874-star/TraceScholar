@@ -33,7 +33,7 @@ def authenticated_client(settings):
     return client
 
 
-@pytest.mark.parametrize("path", ["/", "/assets/app.js", "/assets/app.css", "/api/papers", "/docs", "/openapi.json"])
+@pytest.mark.parametrize("path", ["/", "/reader/00000000-0000-0000-0000-000000000001", "/assets/reader.js", "/assets/app.js", "/assets/app.css", "/api/papers", "/docs", "/openapi.json"])
 def test_unauthenticated_visitors_cannot_access_ui_or_data(path):
     client = TestClient(create_app(production_settings()))
     response = client.get(path)

@@ -1,5 +1,7 @@
 import io
 import json
+import subprocess
+import time
 import uuid
 import pymupdf
 import pytest
@@ -36,7 +38,7 @@ def test_ocr_persists_text_index_and_skips_completed_on_retry(client,monkeypatch
     paper=upload(client,'Scan',['Scanned attention text','Second scan'],scanned=True)
     monkeypatch.setattr(ocr,'engine_command',lambda:['test'])
     calls=[]
-    def recognize(page,command):
+    def recognize(page,command,on_rendered=None):
         calls.append(page.number)
         if page.number==1: raise RuntimeError('Temporary page failure')
         return 'Scaled dot product attention computes query key value representation for transformers.'
@@ -47,7 +49,7 @@ def test_ocr_persists_text_index_and_skips_completed_on_retry(client,monkeypatch
     assert job['status']=='partial'
     assert job['processed']==2 and job['completed_pages']==[1]
     assert client.get(f'/api/papers/{pid}').json()['needs_ocr_pages']==[2]
-    monkeypatch.setattr(ocr,'recognize',lambda page,command:'A second recovered page contains enough text for indexed academic attention retrieval.')
+    monkeypatch.setattr(ocr,'recognize',lambda page,command,**kwargs:'A second recovered page contains enough text for indexed academic attention retrieval.')
     client.post(f'/api/papers/{pid}/ocr')
     assert client.get(f'/api/papers/{pid}/ocr').json()['requested_pages']==[2]
     assert client.get(f'/api/papers/{pid}').json()['parse_status']=='ready'
@@ -64,6 +66,54 @@ def test_missing_ocr_engine_and_restart_status_are_explicit(client,monkeypatch):
     path=papers._papers_dir()/pid/'ocr-job.json'
     papers._write_json(path,{'status':'running'})
     assert client.get(f'/api/papers/{pid}/ocr').json()['status']=='interrupted'
+
+def test_ocr_reports_live_page_phase_and_stall(client,monkeypatch):
+    p=upload(client,'Scan',['not text'],scanned=True);pid=p['paper_id']
+    monkeypatch.setattr(ocr,'engine_command',lambda:['test'])
+    def recognize(page,command,on_rendered=None):
+        status=client.get(f'/api/papers/{pid}/ocr').json()
+        assert status['phase']=='rendering' and status['current_page']==1
+        assert status['processed']==0 and status['status']=='running'
+        on_rendered()
+        path=papers._papers_dir()/pid/'ocr-job.json'
+        job=papers._read_metadata(path)
+        assert job['phase']=='recognizing'
+        job['updated_at']=time.time()-60
+        papers._write_json(path,job)
+        assert client.get(f'/api/papers/{pid}/ocr').json()['stalled']
+        return 'An OCR page provides enough academic attention content for retrieval and translation.'
+    monkeypatch.setattr(ocr,'recognize',recognize)
+    client.post(f'/api/papers/{pid}/ocr')
+    job=client.get(f'/api/papers/{pid}/ocr').json()
+    assert job['status']=='done' and job['phase']=='finished'
+    assert job['finished_at']>=job['started_at'] and not job['stalled']
+
+def test_recognize_uses_grayscale_and_one_cpu_thread(monkeypatch):
+    captured={}
+    class Page:
+        rect=pymupdf.Rect(0,0,600,800)
+        def get_pixmap(self,**kwargs):
+            captured.update(kwargs)
+            class Pixmap:
+                def save(self,path): captured['path']=str(path)
+            return Pixmap()
+    def run(args,**kwargs):
+        captured['args']=args;captured.update(kwargs)
+        return subprocess.CompletedProcess(args,0,stdout=b'Original scanned text')
+    monkeypatch.setattr(ocr.subprocess,'run',run)
+    calls=[]
+    assert ocr.recognize(Page(),['tesseract'],lambda:calls.append('rendered'))=='Original scanned text'
+    assert captured['colorspace'] is pymupdf.csGRAY
+    assert captured['env']['OMP_THREAD_LIMIT']==captured['env']['OMP_NUM_THREADS']=='1'
+    assert captured['timeout']==90 and calls==['rendered']
+
+@pytest.mark.parametrize('error,expected',[
+    (subprocess.TimeoutExpired(['tesseract'],90),'90 秒'),
+    (subprocess.CalledProcessError(1,['tesseract'],stderr=b'Error loading eng.traineddata'),'语言包'),
+    (subprocess.CalledProcessError(-9,['tesseract']),'内存'),
+])
+def test_ocr_failure_reason_is_actionable(error,expected):
+    assert expected in ocr._page_error(error)
 
 def test_native_pdf_and_translation_anchor_validation(client,monkeypatch):
     p=upload(client,'Read',['An academic attention method has parameters beta = 0.9 and code sample.'])
