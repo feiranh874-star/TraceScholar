@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>论文阅读 · TraceScholar</title>
     <link rel="stylesheet" href="/assets/app.css?v=11" />
-    <link rel="stylesheet" href="/assets/reader.css?v=1" />
-    <script src="/assets/reader.js?v=2" defer></script>
+    <link rel="stylesheet" href="/assets/reader.css?v=2" />
+    <script src="/assets/reader.js?v=3" defer></script>
+    <script src="/assets/reader-plus.js?v=1" defer></script>
   </head>
   <body class="reader-page">
     <header class="reader-header">
@@ -28,17 +29,19 @@
             <div class="page-controls"><button id="prevPage" aria-label="上一页">←</button><label class="sr-only" for="pageNumber">页码</label><input id="pageNumber" type="number" min="1" value="1" /><span id="pageTotal">/ —</span><button id="nextPage" aria-label="下一页">→</button></div>
             <div class="reader-fit-tools"><button class="reader-fit-button" id="fitPage" type="button">适应整页</button><label for="readerZoom" class="sr-only">缩放</label><input id="readerZoom" type="range" min="60" max="180" value="100" /><span id="readerZoomLabel">100%</span></div>
           </div>
-          <div class="reader-canvas" id="readerCanvas"><div class="reader-image-stage"><img id="originalPdfImage" alt="当前页原版 PDF" /><span id="imageStatus" role="status">正在加载原版页面…</span></div></div>
+          <div class="reader-canvas" id="readerCanvas"><div class="reader-image-stage"><div class="reader-page-sheet"><img id="originalPdfImage" alt="当前页原版 PDF" /><div id="sourceHighlights" aria-hidden="true"></div></div><span id="imageStatus" role="status">正在加载原版页面…</span></div></div>
           <p class="reader-document-caption" id="readerPageLabel">原版页面 · 第 1 页</p>
         </section>
         <aside class="reader-text-panel" aria-label="分页文字与段落翻译">
-          <label class="reader-field">章节导航<select id="sectionSelect"><option value="">选择章节</option></select></label>
+          <div class="reader-extra-links"><a id="readerWorkspace" href="/workspace">本页图表与研究工具 ↗</a><button id="readerBilingualToggle" type="button">中英对照</button></div><label class="reader-field">章节导航<select id="sectionSelect"><option value="">选择章节</option></select></label>
           <div class="reader-text-heading"><h2>本页文字</h2><span id="textOrigin" class="reader-tag"></span></div>
           <p class="reader-hint" id="textHint">选中下方连续原文，即可翻译；图片内的文字需要先完成 OCR。</p>
           <article id="pageText" class="reader-page-text" aria-live="polite">正在读取本页文字…</article>
           <section class="reader-translation" aria-labelledby="translationHeading"><h2 id="translationHeading">段落翻译</h2><label class="reader-field">选中的连续原文<textarea id="translationSource" rows="4" maxlength="8000" placeholder="选中上方一段文字，或粘贴本页原文"></textarea></label><div class="reader-translation-actions"><label for="translationTarget" class="sr-only">翻译语言</label><select id="translationTarget"><option value="zh">译成中文</option><option value="en">译成英文</option></select><button class="primary-button" type="button" id="translateButton">翻译段落</button></div><p class="reader-hint">翻译会调用已配置的模型 API。</p><div id="translationResult" class="reader-translation-result" aria-live="polite"></div></section>
         </aside>
       </div>
+      <section class="reader-info" id="readerReferences"><details><summary>参考文献与引用往返</summary><p class="reader-hint">点击本页正文中的引用编号，定位对应条目；返回链接可回到来源页。扫描文字可能漏识别编号。</p><div id="readerReferenceItems"></div></details></section>
+      <section class="reader-info" id="bilingualPanel" hidden><div class="reader-extra-links"><h2>中英对照</h2><label><input id="syncScroll" type="checkbox" checked>同步滚动</label><select id="bilingualTarget"><option value="zh">中文译文</option><option value="en">英文译文</option></select><a id="fullTranslateLink" href="/workspace">启动 / 继续全文翻译 ↗</a></div><p class="reader-hint">显示已保存的本页译文；两侧按滚动比例联动，不代表逐句对齐。</p><div class="reader-bilingual"><article id="bilingualOriginal"></article><article id="bilingualTranslation"></article></div></section>
     </main>
   </body>
 </html>

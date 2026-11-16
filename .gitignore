@@ -39,3 +39,8 @@ logs/
 *.pdf
 *.docx
 *.zip
+
+# Reproducible authoring intermediates
+tmp/
+output/video/
+!output/pdf/TraceScholar-技术说明-审阅稿.pdf

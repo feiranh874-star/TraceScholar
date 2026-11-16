@@ -36,7 +36,7 @@ MAX_EXTRACTED_CHARS = 20_000_000
 MIN_PAGE_TEXT_CHARS = 40
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 PDF_MAGIC = b"%PDF-"
-_STORE_LOCK = threading.Lock()
+_STORE_LOCK = threading.RLock()
 
 
 def _papers_dir() -> Path:
@@ -88,6 +88,8 @@ def _storage_usage_bytes() -> int:
         if not paper_dir.is_dir() or paper_dir.name.startswith(".") or paper_dir.is_symlink():
             continue
         total += sum(path.stat().st_size for path in paper_dir.rglob("*") if path.is_file() and not path.is_symlink())
+    for folder in ('jobs', 'agent-runs'):
+        total += sum(p.stat().st_size for p in (DATA_DIR/folder).glob('*') if p.is_file() and not p.is_symlink())
     return total
 
 
@@ -262,7 +264,8 @@ def upload_paper(
 
         sha256 = digest.hexdigest()
         filename = _safe_filename(file.filename)
-        with _STORE_LOCK:
+        from app import ocr,jobs
+        with ocr._LOCK,jobs._LOCK,_STORE_LOCK:
             duplicate = _find_duplicate(sha256)
             if duplicate:
                 return JSONResponse(
@@ -314,6 +317,8 @@ def upload_paper(
                 replacement = next((m["paper"] for m in matches if m["paper"]["paper_id"] == target_paper_id), None)
                 if replacement is None or replacement["sha256"] != target_sha256:
                     raise HTTPException(409, "目标记录已变化或不是关联论文，请重新检查后选择。")
+                if replacement['paper_id'] in ocr._ACTIVE or jobs.busy(replacement['paper_id']):
+                    raise HTTPException(409,'目标论文任务正在运行，请完成后再替换。')
             chunks = build_chunks(
                 pages,
                 sections,
@@ -402,11 +407,13 @@ def get_paper(paper_id: uuid.UUID) -> dict[str, Any]:
 def delete_paper(paper_id: uuid.UUID):
     """Permanently delete exactly one record and its derived files."""
     # Share the scheduling lock so OCR cannot start between the check and removal.
-    from app import ocr
-    with ocr._LOCK, _STORE_LOCK:
+    from app import ocr, jobs
+    with ocr._LOCK, jobs._LOCK, _STORE_LOCK:
         _load_paper(paper_id)
         if str(paper_id) in ocr._ACTIVE:
             raise HTTPException(409, "该论文正在 OCR 识别，请等待处理结束后再删除。")
+        if jobs.busy(paper_id):
+            raise HTTPException(409, '该论文有后台解析或翻译任务，请等待处理结束后再删除。')
         directory = _papers_dir() / str(paper_id)
         try:
             shutil.rmtree(directory)

@@ -1,0 +1,8 @@
+[
+ {"id":"author6","question":"Attention Is All You Need 的第六位作者是谁，首页署名机构是什么？请区分工作完成时的机构脚注。","pages":[1],"facts":[["Aidan N. Gomez"],["University of Toronto"],["Google Brain"]]},
+ {"id":"adam","question":"Transformer 使用 Adam 的 beta1 和 beta2 分别是多少？","pages":[7],"facts":[["0.9"],["0.98"]]},
+ {"id":"gpu","question":"Transformer base 训练用了多少块 GPU，是什么型号，训练时长多少？","pages":[7],"facts":[["8"],["P100"],["12 hours","12 小时","12小时"]]},
+ {"id":"bleu","question":"Transformer big 在英德翻译上的 BLEU 是多少，相比此前最好模型（含集成）提高多少？","pages":[8,1],"facts":[["28.4"],["more than 2.0","over 2","超过 2","超过2"]]},
+ {"id":"layernorm","question":"Transformer 引用的 Layer normalization 文献由哪些作者撰写，年份是什么？","pages":[10],"facts":[["Jimmy Lei Ba"],["Jamie Ryan Kiros"],["Geoffrey E Hinton","Geoffrey E. Hinton"],["2016"]]},
+ {"id":"table2","question":"Table 2 中 Transformer base 和 big 的 EN-DE 与 EN-FR BLEU 分别是多少？","pages":[8],"facts":[["27.3"],["38.1"],["28.4"],["41.8"]]}
+]

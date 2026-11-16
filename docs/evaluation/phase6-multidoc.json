@@ -1,0 +1,12 @@
+{
+  "documents": 3,
+  "questions": 14,
+  "paper_scoped_page_hit_at_6": 0.875,
+  "all_library_page_hit_at_6": 0.75,
+  "evidence_fact_coverage_at_6": 0.875,
+  "comparison_source_coverage": 1.0,
+  "paper_scoped_checks": 16,
+  "all_library_checks": 12,
+  "evidence_fact_checks": 48,
+  "comparison_checks": 2
+}

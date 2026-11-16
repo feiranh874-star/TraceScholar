@@ -17,7 +17,7 @@ from app.similarity import content_signature
 
 router = APIRouter(prefix='/api/papers', tags=['ocr'])
 _ACTIVE: set[str] = set()
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
 _SLOT = threading.BoundedSemaphore(1)
 
 
@@ -167,8 +167,12 @@ def ocr_status(paper_id: uuid.UUID):
 
 @router.post('/{paper_id}/ocr', status_code=202)
 def start_ocr(paper_id: uuid.UUID, background: BackgroundTasks):
+    from app import jobs
     with _LOCK:
         papers._load_paper(paper_id)
+        with jobs._LOCK:
+            if jobs.busy(paper_id):
+                raise HTTPException(409, '该论文已有解析或翻译任务，请等待完成。')
         if str(paper_id) in _ACTIVE:
             raise HTTPException(409, '已有 OCR 任务运行，请等待完成后重试。')
         remaining = [page['page'] for path in sorted((papers._papers_dir()/str(paper_id)/'pages').glob('*.json'))

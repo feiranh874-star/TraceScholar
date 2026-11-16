@@ -12,6 +12,7 @@
 !frontend/
 !frontend/index.html
 !frontend/reader.html
+!frontend/workspace.html
 !frontend/assets/
 !frontend/assets/*.css
 !frontend/assets/*.js

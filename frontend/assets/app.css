@@ -2972,3 +2972,11 @@ button.tool-result-card { cursor: pointer; }
 .delete-paper-button:hover { background: #fff1f2; border-color: #fecdd3; }
 .delete-paper-button:focus-visible { outline: 2px solid #bd3546; outline-offset: 2px; }
 .delete-paper-button:disabled { opacity: .55; cursor: wait; }
+.answer-table-wrap { overflow: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: 10px; }
+.answer-table { border-collapse: collapse; width: 100%; min-width: 420px; font-size: 13px; }
+.answer-table th, .answer-table td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.answer-table th { background: var(--surface-tint); font-weight: 600; }
+.answer-table { table-layout: auto; }
+.answer-table th { width: auto; min-width: 120px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; letter-spacing: 0; }
+.answer-table td { min-width: 110px; max-width: 360px; overflow-wrap: anywhere; }
+.answer-table th:first-child { min-width: 190px; }

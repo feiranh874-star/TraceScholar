@@ -109,7 +109,7 @@ class DemoGuardMiddleware:
                 await JSONResponse({"detail": "请求体超过大小限制。"}, status_code=413)(scope, receive, send)
                 return
 
-        is_upload = (path.rstrip("/") in {"/api/papers", "/api/library/import"}) and scope["method"] == "POST"
+        is_upload = (path.rstrip("/") in {"/api/papers", "/api/library/import", "/api/library/batch-upload"}) and scope["method"] == "POST"
         if is_upload:
             now = time.monotonic()
             self._trim(self.upload_times, now)

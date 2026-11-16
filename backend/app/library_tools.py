@@ -100,17 +100,22 @@ def recommendations(paper_id: uuid.UUID):
     idf={t: math.log((len(records)+1)/(count+1))+1 for t,count in df.items()}
     vectors={pid:{t:count*idf[t] for t,count in c.items()} for pid,c in counters.items()}
     a=vectors[str(paper_id)]; norm_a=math.sqrt(sum(v*v for v in a.values()))
+    from app.tracking import _read
+    feedback = _read().get('feedback', {})
     result=[]
     for m in records:
         if m['work_id']==anchor['work_id']: continue
+        if feedback.get(m['paper_id'], {}).get('vote') == 'dislike': continue
         b=vectors[m['paper_id']]; shared=set(a)&set(b)
         score=sum(a[t]*b[t] for t in shared)/max(1e-12,norm_a*math.sqrt(sum(v*v for v in b.values())))
         if score<=0: continue
         terms=sorted(shared,key=lambda t:a[t]*b[t],reverse=True)[:6]
+        code_links = re.findall(r'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', m.get('abstract') or '')
         result.append({'paper': papers._public_paper(m),'score':round(score,4), 'shared_terms':terms,
+                       'feedback':feedback.get(m['paper_id'],{}).get('vote'),'code_links':code_links,
                        'reason':'题名/摘要中的共同术语：'+', '.join(terms)})
-    return {'items': sorted(result,key=lambda m:m['score'],reverse=True)[:5],
-            'method':'本地题名与摘要 TF-IDF 余弦相似度；不是外网追踪或引用质量评价'}
+    return {'items': sorted(result,key=lambda m:(m['feedback']=='like',bool(m['code_links']),m['score']),reverse=True)[:5],
+            'method':'本地题名/摘要 TF-IDF；排除不相关反馈，优先有帮助及摘要有代码线索的相关项。共享演示反馈不是多用户画像，代码链接未做质量保证。'}
 
 
 @router.post('/outline')

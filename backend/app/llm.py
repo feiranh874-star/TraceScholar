@@ -73,7 +73,7 @@ def build_grounded_messages(
                 "Answer in the same language as the question. Explain mathematical relationships in plain "
                 "words when relevant; do not reproduce equations, raw LaTeX, or standalone formula blocks. "
                 "For example, describe what quantities are compared or combined instead of writing symbols."
-                " Never use Markdown or HTML tables. Use short paragraphs or bullets instead. "
+                " Use short paragraphs, bullets, or a compact Markdown table when comparing verified values. Never output HTML. "
                 "For comparisons, follow the requested scope and length limit strictly. Never expand into unrelated aspects."
                 f" Task focus: {ANSWER_MODES.get(answer_mode, ANSWER_MODES['general'])}"
             ),

@@ -517,7 +517,7 @@
           rows.push(row);
           index += 1;
         }
-        if (rows.length) blocks.push(renderComparisonCards(headers, rows));
+        if (rows.length) blocks.push(`<div class="answer-table-wrap"><table class="answer-table"><thead><tr>${headers.map(h => `<th>${escapeHtml(cleanAnswerLabel(h))}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${headers.map((_, i) => `<td>${escapeHtml(row[i] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
         continue;
       }
       if (!lines[index].trim()) flushParagraph();
@@ -571,7 +571,7 @@
       const source = item.source || {};
       const pageLabel = source.page_start === source.page_end ? `第 ${source.page_start} 页` : `第 ${source.page_start}–${source.page_end} 页`;
       const sectionTitle = displaySectionTitle(item.section_title);
-      return `<button type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}"><strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.paper_title || item.filename)}</strong><span>${escapeHtml([sectionTitle, source.version_label, pageLabel].filter(Boolean).join(" · "))}</span></button>`;
+      return `<button type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}" data-evidence-quote="${escapeHtml(item.text?.slice(0, 120) || "")}"><strong>[${escapeHtml(item.citation_id)}] ${escapeHtml(item.paper_title || item.filename)}</strong><span>${escapeHtml([sectionTitle, source.version_label, pageLabel].filter(Boolean).join(" · "))}</span></button>`;
     }).join("");
     elements.answerCitations.innerHTML = citationLinks
       ? `<details class="answer-citation-details"><summary>查看引用来源（${citations.length}）</summary><div class="answer-citation-list">${citationLinks}</div></details>`
@@ -607,7 +607,7 @@
             <details class="evidence-source">
               <summary>查看原文片段 <span aria-hidden="true">＋</span></summary>
               <p>${escapeHtml(item.text)}</p>
-              <button class="evidence-open" type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}">打开论文 · ${escapeHtml(pageLabel)} <span>→</span></button>
+              <button class="evidence-open" type="button" data-evidence-paper="${escapeHtml(source.paper_id)}" data-evidence-page="${Number(source.page_start) || 1}" data-evidence-quote="${escapeHtml(item.text?.slice(0, 120) || "")}">打开论文 · ${escapeHtml(pageLabel)} <span>→</span></button>
             </details>
           </article>
         `;
@@ -845,6 +845,8 @@
   function openPaper(paperId, trigger = null, initialPage = 1) {
     const page = Math.max(1, Math.trunc(Number(initialPage)) || 1);
     const query = new URLSearchParams({ page: String(page), from: state.activeView });
+    const quote = trigger?.dataset?.evidenceQuote;
+    if (quote) query.set("highlight", quote.slice(0, 120));
     window.location.assign(`/reader/${encodeURIComponent(paperId)}?${query}`);
   }
 
@@ -1075,7 +1077,7 @@
     return runTool("buildChart", "chartResult", async output => {
       const file = byId("chartFile").files[0];
       if (!file || file.size > 1024 * 1024) throw new Error("请选择不超过 1 MiB 的 UTF-8 CSV。");
-      const body = new FormData(); body.append("file", file); body.append("x", byId("chartX").value); body.append("y", byId("chartY").value); body.append("kind", byId("chartKind").value);
+      const body = new FormData(); body.append("file", file); body.append("x", byId("chartX").value); body.append("y", byId("chartY").value); body.append("kind", byId("chartKind").value); body.append("z", byId("chartZ").value);
       const response = await fetch("/api/library/chart", { method: "POST", body });
       if (!response.ok) throw await responseError(response);
       const data = await response.json();

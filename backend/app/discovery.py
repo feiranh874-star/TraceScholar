@@ -63,7 +63,7 @@ def search(body: SearchRequest):
                       'url':'https://arxiv.org/abs/'+identifier,'pdf_url':'https://arxiv.org/pdf/'+identifier})
     normalize = lambda title: re.sub(r'\W+', '', title.casefold())
     items.sort(key=lambda item: normalize(item['title']) != normalize(body.query))
-    return {'items':items,'source':'arXiv title search','notice':'请核对题名、作者及版本，再确认导入。当前不包含定时追踪。'}
+    return {'items':items,'source':'arXiv title search','notice':'请核对题名、作者及版本，再确认导入。主题定时追踪请使用研究工作区。'}
 
 @router.post('/import', status_code=201)
 def import_arxiv(body: ImportRequest):
