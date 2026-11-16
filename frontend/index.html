@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=14" />
+    <link rel="stylesheet" href="/assets/app.css?v=15" />
   </head>
   <body>
     <div class="app-shell">
@@ -103,7 +103,20 @@
 
           <section class="view" id="view-import" data-view-panel="import">
             <div class="section-toolbar"><div><span class="section-kicker">PDF 解析入库</span><h2>导入研究资料</h2><p>系统将提取论文元数据和逐页文本，并标记扫描页，导入后可启动本地 OCR。</p></div></div>
-            <div class="import-layout"><section class="panel full-drop-panel"><label class="import-notes">论文备注（可选）<textarea id="importNotes" rows="2" maxlength="4000" placeholder="例如：注意力机制入门、老师推荐、综述第二章"></textarea><small>先填写备注，再选择 PDF；入库后也可在论文库点击“整理”修改。备注可搜索，不作为论文原文证据。</small></label><div class="large-dropzone" id="largeDropzone" tabindex="0" role="button"><div class="large-upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></div><h3>将论文 PDF 拖放到这里</h3><p>支持可复制文字的 PDF；扫描件导入后，可在详情中启动 OCR 识别。</p><button class="primary-button" type="button">选择本地 PDF</button><span class="upload-limits">单个文件不超过 50 MiB · 最多 2000 页 · 不支持加密 PDF</span></div><div class="upload-progress is-hidden" id="uploadProgress"><div class="progress-icon"><span></span></div><div class="progress-copy"><strong id="uploadFilename">正在处理 PDF</strong><span>上传并提取逐页文本，请稍候…</span><div class="progress-track"><i></i></div></div></div><div class="upload-result is-hidden" id="uploadResult"></div></section><aside class="import-guide"><div class="guide-title"><span>处理流程</span><strong>导入后会发生什么？</strong></div><ol class="steps"><li><i>1</i><div><strong>文件安全检查</strong><span>验证格式、大小、页数与加密状态</span></div></li><li><i>2</i><div><strong>逐页解析</strong><span>提取题名、作者、页码和正文文本</span></div></li><li><i>3</i><div><strong>扫描页识别</strong><span>标记缺少可检索文字的页面</span></div></li><li><i>4</i><div><strong>建立可信索引</strong><span>保留论文与原始页码的对应关系</span></div></li></ol><div class="guide-tip"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A7 7 0 1 1 15.5 14.5c-1 .8-1.5 1.7-1.5 3h-4c0-1.3-.5-2.2-1.5-3Z"/></svg><p><strong>推荐测试资料</strong><span>先导入 Transformer 论文 v7，再导入 v1，为后续版本识别做准备。</span></p></div></aside></div>
+            <div class="library-tabs" role="tablist" aria-label="导入方式"><button id="singleImportTab" role="tab" aria-selected="true" class="is-active">单篇导入</button><button id="batchImportTab" role="tab" aria-selected="false">批量导入</button></div>
+            <section id="batchImportPanel" hidden>
+              <div class="panel batch-upload-card">
+                <div class="batch-dropzone" id="batchDropzone" role="button" tabindex="0" aria-label="选择多个 PDF"><span class="batch-upload-icon" aria-hidden="true">＋</span><h3>一次导入多篇论文</h3><p>拖入多个 PDF，或点击选择；选好后再点击“开始批量导入”。</p><span>每批最多 20 篇 · 文件总计不超过 50 MiB</span></div>
+                <input id="batchFileInput" type="file" multiple accept="application/pdf,.pdf" hidden>
+                <div class="batch-selection-header"><strong id="batchQueueSummary">还没有选择文件</strong><button type="button" class="text-button" id="clearBatchQueue">清空待上传列表</button></div><div id="batchQueue" class="batch-file-queue"></div>
+                <label class="batch-note-field">本批统一备注（可选）<textarea id="batchNotes" rows="2" maxlength="4000" placeholder="例如：注意力机制课程资料，待精读"></textarea><small>应用到本批新导入论文；已有重复文件的备注不变。入库后可逐篇修改。</small></label>
+                <div class="batch-start-row"><p>重复文件会跳过；遇到相关版本，等你逐篇确认，不自动替换。</p><button type="button" id="startBatchImport" class="primary-button" disabled>开始批量导入</button></div>
+                <div id="batchUploadStatus" role="status" aria-live="polite"></div><progress id="batchUploadProgress" max="100" value="0" hidden aria-label="文件上传进度"></progress>
+              </div>
+              <section class="panel batch-job-card" id="batchCurrentJob" hidden><div class="batch-selection-header"><div><span class="section-kicker">逐篇处理结果</span><h3 id="batchJobHeading">批量导入任务</h3></div><button type="button" id="refreshBatchJob" class="secondary-button">刷新进度</button></div><p id="batchJobMessage" role="status"></p><progress id="batchParseProgress" max="1" value="0" aria-label="文件处理进度"></progress><div id="batchJobSummary" class="batch-summary"></div><div id="batchJobFiles"></div><div class="batch-start-row"><button type="button" id="resumeBatchJob" class="secondary-button" hidden>继续未完成文件</button><button type="button" class="primary-button" data-go-library>去论文库查看</button></div></section>
+              <details class="panel batch-history"><summary>最近的批量导入记录</summary><button type="button" id="refreshBatchHistory" class="text-button">刷新记录</button><div id="batchHistoryList">暂无记录。</div></details>
+            </section>
+            <div class="import-layout" id="singleImportArea"><section class="panel full-drop-panel"><label class="import-notes">论文备注（可选）<textarea id="importNotes" rows="2" maxlength="4000" placeholder="例如：注意力机制入门、老师推荐、综述第二章"></textarea><small>先填写备注，再选择 PDF；入库后也可在论文库点击“整理”修改。备注可搜索，不作为论文原文证据。</small></label><div class="large-dropzone" id="largeDropzone" tabindex="0" role="button"><div class="large-upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></div><h3>将论文 PDF 拖放到这里</h3><p>支持可复制文字的 PDF；扫描件导入后，可在详情中启动 OCR 识别。</p><button class="primary-button" type="button">选择本地 PDF</button><span class="upload-limits">单个文件不超过 50 MiB · 最多 2000 页 · 不支持加密 PDF</span></div><div class="upload-progress is-hidden" id="uploadProgress"><div class="progress-icon"><span></span></div><div class="progress-copy"><strong id="uploadFilename">正在处理 PDF</strong><span>上传并提取逐页文本，请稍候…</span><div class="progress-track"><i></i></div></div></div><div class="upload-result is-hidden" id="uploadResult"></div></section><aside class="import-guide"><div class="guide-title"><span>处理流程</span><strong>导入后会发生什么？</strong></div><ol class="steps"><li><i>1</i><div><strong>文件安全检查</strong><span>验证格式、大小、页数与加密状态</span></div></li><li><i>2</i><div><strong>逐页解析</strong><span>提取题名、作者、页码和正文文本</span></div></li><li><i>3</i><div><strong>扫描页识别</strong><span>标记缺少可检索文字的页面</span></div></li><li><i>4</i><div><strong>建立可信索引</strong><span>保留论文与原始页码的对应关系</span></div></li></ol><div class="guide-tip"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4"/><path d="M8.5 14.5A7 7 0 1 1 15.5 14.5c-1 .8-1.5 1.7-1.5 3h-4c0-1.3-.5-2.2-1.5-3Z"/></svg><p><strong>推荐测试资料</strong><span>先导入 Transformer 论文 v7，再导入 v1，为后续版本识别做准备。</span></p></div></aside></div>
           </section>
           <section class="view" id="view-tools" data-view-panel="tools">
             <div class="tool-actions"><a class="primary-button" href="/workspace" style="text-decoration:none;margin-bottom:18px">进入完整研究工作区 ↗</a></div><div class="section-toolbar"><div><span class="section-kicker">从证据走向研究</span><h2>研究工具</h2><p>选择本地论文，查看真实引用、发现相关工作，并整理写作与图表。</p></div></div>
@@ -123,6 +136,7 @@
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
     <script src="/assets/library-ui.js?v=1" defer></script>
-    <script src="/assets/app.js?v=15" defer></script>
+    <script src="/assets/batch-import.js?v=1" defer></script>
+    <script src="/assets/app.js?v=16" defer></script>
   </body>
 </html>

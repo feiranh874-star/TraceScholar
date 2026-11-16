@@ -9,13 +9,14 @@ import time
 import uuid
 from pathlib import Path
 from typing import Literal
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from app import papers, jobs, ocr
 from app.llm import complete_messages
 from app.processing import build_chunks
 
 router=APIRouter(prefix='/api',tags=['document-operations'])
+MAX_BATCH_UPLOAD_BYTES=50*1024*1024
 
 class MetadataEdit(BaseModel):
     title:str=Field(min_length=1,max_length=500)
@@ -185,9 +186,11 @@ def _batch_runner(record):
         if i in record['completed']: continue
         path=jobs.directory()/(record['id']+'-'+str(i)+'.pdf')
         if not path.exists(): raise RuntimeError('暂存文件已丢失，需重新上传。')
+        record.update(current_file=entry,current_index=i,message=f'正在解析第 {i+1}/{record["total"]} 篇：{entry}')
+        jobs.save(record)
         try:
             with path.open('rb') as stream:
-                response=papers.upload_paper(UploadFile(file=stream,filename=entry),record['payload']['action'],'','')
+                response=papers.upload_paper(UploadFile(file=stream,filename=entry),record['payload']['action'],'','',record['payload'].get('notes',''))
             if hasattr(response,'body'):
                 result=json.loads(response.body);status=response.status_code
             else: result=response;status=201
@@ -201,24 +204,27 @@ def _batch_runner(record):
         if status<500:record['completed'].append(i)
         record['progress']=len(record['completed']);jobs.save(record)
     if len(record['completed'])<record['total']:raise RuntimeError('部分文件暂时处理失败，可以继续未完成文件。')
-    return {'files':results,'notice':'关联文件不自动覆盖；冲突条目需在单篇导入页确认。'}
+    record.update(current_file=None,current_index=None)
+    return {'files':results,'notice':'关联版本等待逐篇确认；完全相同的文件复用已有记录。'}
 
 @router.post('/library/batch-upload',status_code=202)
-def batch_upload(files:list[UploadFile]=File(...)):
+def batch_upload(files:list[UploadFile]=File(...),notes:str=Form(default='',max_length=4000)):
     if not 1<=len(files)<=20: raise HTTPException(422,'每批 1–20 个 PDF，总请求不超过服务限制。')
-    identifier=str(uuid.uuid4());names=[];paths=[]
+    notes=notes.strip() if isinstance(notes,str) else ''
+    identifier=str(uuid.uuid4());names=[];paths=[];total_bytes=0
     try:
         for i,file in enumerate(files):
             path=jobs.directory()/(identifier+'-'+str(i)+'.pdf');paths.append(path);size=0
             with path.open('wb') as out:
                 while chunk:=file.file.read(1024*1024):
-                    size+=len(chunk)
+                    size+=len(chunk);total_bytes+=len(chunk)
+                    if total_bytes>MAX_BATCH_UPLOAD_BYTES:raise HTTPException(413,'每批 PDF 总大小不能超过 50 MiB，请分批上传。')
                     if size>papers.MAX_UPLOAD_BYTES or papers._storage_usage_bytes()+len(chunk)>papers.MAX_STORAGE_BYTES:raise HTTPException(413,'文件或存储配额超限。')
                     out.write(chunk)
             names.append(papers._safe_filename(file.filename))
         # Preallocate id so the persisted task can locate staged files.
         original_id=identifier
-        record={'id':identifier,'kind':'batch','paper_ids':[],'payload':{'files':names,'action':'ask'},'created_at':time.time(),'completed':[],'result':None,'status':'interrupted'}
+        record={'id':identifier,'kind':'batch','paper_ids':[],'payload':{'files':names,'action':'ask','notes':notes},'created_at':time.time(),'completed':[],'result':None,'status':'interrupted'}
         jobs.save(record)
         return jobs.launch('batch',[],{},_batch_runner,identifier=original_id)
     except Exception:
@@ -260,7 +266,7 @@ def resolve_batch(identifier:uuid.UUID,index:int,body:BatchDecision):
         else:
             if not path.exists():raise HTTPException(404,'暂存文件已丢失，请重新上传。')
             with path.open('rb') as stream:
-                result=papers.upload_paper(UploadFile(file=stream,filename=entry['filename']),'keep_both','','')
+                result=papers.upload_paper(UploadFile(file=stream,filename=entry['filename']),'keep_both','','',record['payload'].get('notes',''))
             if hasattr(result,'body'):entry.update(status=result.status_code,result=json.loads(result.body))
             else:entry.update(status=201,result=result)
         path.unlink(missing_ok=True)

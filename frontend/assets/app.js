@@ -1118,7 +1118,11 @@
         dropzone.classList.remove("is-dragging");
       });
     });
-    dropzone.addEventListener("drop", (event) => uploadFile(event.dataTransfer?.files?.[0]));
+    dropzone.addEventListener("drop", (event) => {
+      const files = Array.from(event.dataTransfer?.files || []);
+      if (files.length > 1) { navigateTo("import"); window.TraceBatch.addFiles(files); }
+      else uploadFile(files[0]);
+    });
   }
 
   function bindEvents() {
@@ -1224,6 +1228,7 @@
   }
 
   async function initialize() {
+    window.TraceBatch.init({ reload: () => loadPapers({ quiet: true }) });
     window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast });
     bindEvents();
     const initialView = new URLSearchParams(window.location.search).get("view");
