@@ -40,6 +40,14 @@ AFFILIATION_WORDS = {
     "research",
     "school",
     "university",
+    "college",
+    "technologies",
+    "technology",
+    "corporation",
+    "conference",
+    "学院",
+    "大学",
+    "研究所",
 }
 TITLE_EXCLUSIONS = (
     "provided proper attribution",
@@ -112,36 +120,70 @@ def extract_title(page: fitz.Page, embedded_title: str | None) -> str | None:
 
 
 def _clean_person_name(value: str) -> str:
-    value = re.sub(r"[\s*\u2217\u2020\u2021]+$", "", value).strip()
+    value = re.sub(r"[\s*\u2217\u2020\u2021\d¹²³⁴⁵⁶⁷⁸⁹⁰]+$", "", value).strip()
+    # Some PDFs concatenate a following surname immediately after a ligature.
+    # Do not split normal internal capitals in names such as McCandlish.
+    value = re.sub(r'([ﬀﬁﬂﬃﬄﬅﬆ])(?=[A-Z])', r'\1 ', value)
+    value = unicodedata.normalize('NFKC', value)
     return re.sub(r"\s+", " ", value)
 
 
 def _looks_like_person_name(value: str, title: str | None) -> bool:
     lowered = value.casefold()
-    if not value or value == title or any(word in lowered.split() for word in AFFILIATION_WORDS):
+    if not value or value == title or any(word in re.findall(r'\w+', lowered) for word in AFFILIATION_WORDS):
         return False
-    if any(character.isdigit() for character in value) or len(value) > 80:
+    if set(re.findall(r'\w+', lowered)) & {'model', 'models', 'parameters', 'algorithms', 'learning', 'optimization', 'networks', 'abstract', 'submission', 'contributors', 'workshop', 'recognition', 'anonymous'}:
         return False
+    if any(character.isdigit() for character in value) or len(value) > 80 or any(c in value for c in '@{}:;='):
+        return False
+    # Conservative name-shape check, not a general named-entity recognizer.
+    # Require capitalized name tokens, while allowing initials and surname particles.
+    if re.fullmatch(r'[\u4e00-\u9fff]{2,4}', value):
+        return True
     words = value.replace("-", " ").split()
-    return 2 <= len(words) <= 6 and all(any(character.isalpha() for character in word) for word in words)
+    particles = {'de', 'del', 'da', 'dos', 'van', 'von', 'der', 'den', 'di', 'du', 'le', 'la', 'bin', 'al'}
+    return (2 <= len(words) <= 6 and
+            all(word in particles or (word[0].isupper() and all(c.isalpha() or c in ".'’" for c in word)) for word in words) and
+            sum(word[0].isupper() for word in words) >= 2)
 
 
-def extract_authors(first_page_text: str, title: str | None, embedded_author: str | None) -> list[str]:
+def extract_authors(first_page_text: str, title: str | None, embedded_author: str | None, first_page: fitz.Page | None = None) -> list[str]:
     if embedded_author and embedded_author.strip():
         return [item.strip() for item in re.split(r"[,;]", embedded_author) if item.strip()]
 
-    before_abstract = re.split(r"\n\s*Abstract\s*\n", first_page_text, maxsplit=1, flags=re.IGNORECASE)[0]
+    before_abstract = re.split(r"(?:^|\n)\s*(?:Abstract|摘要)\b\s*[:：]?", first_page_text, maxsplit=1, flags=re.IGNORECASE)[0]
     lines = [line.strip() for line in before_abstract.splitlines() if line.strip()]
     authors: list[str] = []
-    for index, line in enumerate(lines):
-        if "@" not in line:
+    title_lines = set()
+    if first_page is not None:
+        layout = _page_lines_with_sizes(first_page)
+        title_spans = [(size, y) for text, size, y in layout if text == title]
+        if title_spans:
+            size, _ = max(title_spans)
+            # Exclude wrapped title fragments using their shared larger font.
+            sizes = sorted(font_size for _, font_size, _ in layout)
+            if sizes and size > sizes[len(sizes) // 2] * 1.1:
+                title_lines = {text for text, font_size, _ in layout if font_size >= size * .95}
+    # Only inspect the title-to-abstract header, never the abstract or body.
+    # In the absence of an abstract, stop at the introduction and bound the header.
+    if title and title in lines:
+        lines = lines[lines.index(title) + 1:]
+    for line in lines[:80]:
+        if re.match(r'^(?:1[. ]+)?(?:Introduction|引言)\b', line, re.I):
+            break
+        if line in title_lines or '@' in line or re.search(r'https?://|arxiv:', line, re.I):
             continue
-        for candidate_index in range(index - 1, max(-1, index - 5), -1):
-            candidate = _clean_person_name(lines[candidate_index])
-            if _looks_like_person_name(candidate, title):
-                if candidate not in authors:
+        # Reject complete institution lines before splitting commas, so a school
+        # name cannot become an apparent person after its suffix is removed.
+        if any(word in re.findall(r'\w+', line.casefold()) for word in AFFILIATION_WORDS):
+            continue
+        if line.isupper() and len(line.split()) > 1:
+            continue
+        candidates = [_clean_person_name(item) for item in re.split(r'[,;，；、]|\s+(?:and|&)\s+|\s{2,}', line)]
+        if candidates and all(_looks_like_person_name(item, title) for item in candidates if item):
+            for candidate in candidates:
+                if candidate and candidate not in authors:
                     authors.append(candidate)
-                break
     return authors
 
 
@@ -372,8 +414,9 @@ def extract_document_metadata(
     first_page_text = pages[0]["text"] if pages else ""
     sample_text = "\n".join(page["text"] for page in pages[:3])
     identifiers, version_label, version_number = detect_identifiers(filename, sample_text)
-    title = extract_title(document.load_page(0), (embedded.get("title") or "").strip() or None)
-    authors = extract_authors(first_page_text, title, (embedded.get("author") or "").strip() or None)
+    first_page = document.load_page(0)
+    title = extract_title(first_page, (embedded.get("title") or "").strip() or None)
+    authors = extract_authors(first_page_text, title, (embedded.get("author") or "").strip() or None, first_page)
     return {
         "title": title,
         "author": ", ".join(authors) or None,

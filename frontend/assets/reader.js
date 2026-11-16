@@ -3,7 +3,7 @@
   const el = id => document.getElementById(id);
   const paperId = location.pathname.split('/').filter(Boolean)[1];
   const params = new URLSearchParams(location.search);
-  const state = {paper:null,page:1,request:0,poll:null,fit:true,zoom:100,text:'',translating:false,ocrPage:null};
+  const state = {paper:null,page:1,request:0,poll:null,fit:false,zoom:100,text:'',translating:false,ocrPage:null};
 
   async function request(url, options) {
     const controller = new AbortController();
@@ -32,6 +32,7 @@
     el('readerTitle').textContent = paper.title || paper.filename;
     document.title = (paper.title || paper.filename) + ' · TraceScholar';
     el('readerSubtitle').textContent = [paper.version_label, paper.page_count + ' 页', authors(paper)].filter(Boolean).join(' · ');
+    el('refreshAuthors').hidden=Boolean(authors(paper));
     el('pageNumber').max = paper.page_count; el('pageTotal').textContent = '/ ' + paper.page_count;
     const fields = [['原始文件',paper.filename],['作者',authors(paper)||'未识别'],['版本',paper.version_label||'未知'],['文本块',String(paper.chunk_count||0)],['待 OCR',(paper.needs_ocr_pages?.length||0)+' 页'],['arXiv',paper.arxiv_id||'未识别']];
     el('readerMetadata').replaceChildren();
@@ -48,11 +49,12 @@
   function fitImage() {
     const image=el('originalPdfImage'), canvas=el('readerCanvas');
     if (!image.naturalWidth||!image.naturalHeight) return;
-    const padding=innerWidth<=600?24:36, width=Math.max(1,canvas.clientWidth-padding), height=Math.max(1,canvas.clientHeight-padding);
+    const padding=8, width=Math.max(1,canvas.clientWidth-padding), height=Math.max(1,canvas.clientHeight-padding);
     const base=state.fit?Math.min(width,height*image.naturalWidth/image.naturalHeight):width;
     image.style.width=Math.round(base*(state.fit?1:state.zoom/100))+'px'; image.style.height='auto';
     canvas.scrollTop=0; canvas.scrollLeft=0;
-    el('readerZoomLabel').textContent=state.fit?'整页':state.zoom+'%'; el('fitPage').setAttribute('aria-pressed',String(state.fit));
+    el('readerZoomLabel').textContent=state.fit?'整页':state.zoom===100?'宽度':state.zoom+'%'; el('fitPage').setAttribute('aria-pressed',String(state.fit));
+    el('fitWidth').setAttribute('aria-pressed',String(!state.fit&&state.zoom===100));
   }
   async function refreshText(page=state.page) {
     const data=await request('/api/papers/'+paperId+'/pages/'+page); if(page!==state.page)return;
@@ -127,6 +129,7 @@
     el('originalPdfImage').addEventListener('load',()=>{el('originalPdfImage').hidden=false;el('imageStatus').hidden=true;fitImage();});
     el('originalPdfImage').addEventListener('error',()=>{el('imageStatus').hidden=false;el('imageStatus').textContent='原版预览暂未加载，请重试翻页或打开原版 PDF。';});
     el('fitPage').addEventListener('click',()=>{state.fit=true;fitImage();});
+    el('fitWidth').addEventListener('click',()=>{state.fit=false;state.zoom=100;el('readerZoom').value=100;fitImage();});
     el('readerZoom').addEventListener('input',event=>{state.fit=false;state.zoom=Number(event.target.value);fitImage();});
     new ResizeObserver(fitImage).observe(el('readerCanvas'));
     el('prevPage').addEventListener('click',()=>loadPage(state.page-1));el('nextPage').addEventListener('click',()=>loadPage(state.page+1));
@@ -134,6 +137,12 @@
     el('pageNumber').addEventListener('keydown',event=>{if(event.key==='Enter')loadPage(event.target.value);});
     el('sectionSelect').addEventListener('change',event=>{if(event.target.value)loadPage(event.target.value);});
     el('ocrButton').addEventListener('click',startOcr);el('translateButton').addEventListener('click',translateParagraph);
+    el('refreshAuthors').addEventListener('click',async()=>{
+      el('refreshAuthors').disabled=true;el('authorRefreshStatus').textContent='正在检查首页作者行…';
+      try { const result=await request('/api/papers/'+paperId+'/refresh-authors',{method:'POST'});await refreshPaper();el('authorRefreshStatus').textContent=result.notice; }
+      catch(error){el('authorRefreshStatus').textContent=error.message;}
+      finally{el('refreshAuthors').disabled=false;}
+    });
     el('pageText').addEventListener('mouseup',()=>{const selection=getSelection();if(selection?.toString().trim())el('translationSource').value=selection.toString().trim();});
     addEventListener('pagehide',()=>clearTimeout(state.poll));
     addEventListener('pageshow',event=>{if(event.persisted)pollOcr();});

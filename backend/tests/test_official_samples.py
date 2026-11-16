@@ -72,6 +72,12 @@ def test_image_only_version_is_marked_for_ocr(client):
     assert paper["chunk_count"] == 0
 
 
+def test_ppo_comma_separated_author_header(client):
+    response=upload_sample(client,'1707.06347v2.pdf')
+    assert response.status_code==201,response.text
+    assert response.json()['authors']==['John Schulman','Filip Wolski','Prafulla Dhariwal','Alec Radford','Oleg Klimov']
+
+
 def test_scan_still_prompts_version_conflict_before_ocr(client):
     latest = upload_sample(client, '1706.03762v7.pdf').json()
     response = upload_sample(client, '1706.03762v1_img.pdf', conflict_action='ask')

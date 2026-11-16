@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from app import papers, jobs, ocr
 from app.llm import complete_messages
-from app.processing import build_chunks
+from app.processing import build_chunks, extract_authors
 
 router=APIRouter(prefix='/api',tags=['document-operations'])
 MAX_BATCH_UPLOAD_BYTES=50*1024*1024
@@ -33,6 +33,28 @@ def edit_metadata(paper_id:uuid.UUID,body:MetadataEdit):
                         metadata_edited_at=time.time())
         jobs.atomic(papers._metadata_path(paper_id),metadata)
     return papers._public_paper(metadata)
+
+@router.post('/papers/{paper_id}/refresh-authors')
+def refresh_authors(paper_id:uuid.UUID):
+    """Supplement missing authors without replacing annotations or edited fields."""
+    with ocr._LOCK, jobs._LOCK, papers._STORE_LOCK:
+        metadata=papers._load_paper(paper_id)
+        if str(paper_id) in ocr._ACTIVE or jobs.busy(paper_id):
+            raise HTTPException(409,'论文任务正在运行，请完成后再补识别作者。')
+        if metadata.get('authors') or metadata.get('author'):
+            return {'paper':papers._public_paper(metadata),'updated':False,'notice':'已有作者信息，未覆盖。需要纠正时请使用元数据编辑。'}
+        import pymupdf as fitz
+        with fitz.open(papers._papers_dir()/str(paper_id)/'source.pdf') as document:
+            text=document[0].get_text('text').strip()
+            embedded=document.metadata.get('author')
+            if len(text)<papers.MIN_PAGE_TEXT_CHARS:
+                text=papers.get_paper_page(paper_id,1).get('text','')
+            authors=extract_authors(text,metadata.get('title'),embedded,document[0])
+        if authors:
+            metadata.update(authors=authors,author=', '.join(authors))
+            jobs.atomic(papers._metadata_path(paper_id),metadata)
+        return {'paper':papers._public_paper(metadata),'updated':bool(authors),
+                'notice':'已补充作者，请与首页署名核对。' if authors else '未找到可靠的作者行。扫描首页请先完成 OCR，也可以在研究工作区手动编辑作者。'}
 
 @router.get('/library/archives')
 def archives():

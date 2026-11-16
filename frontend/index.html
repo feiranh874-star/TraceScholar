@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=15" />
+    <link rel="stylesheet" href="/assets/app.css?v=16" />
   </head>
   <body>
     <div class="app-shell">
@@ -107,6 +107,7 @@
             <section id="batchImportPanel" hidden>
               <div class="panel batch-upload-card">
                 <div class="batch-dropzone" id="batchDropzone" role="button" tabindex="0" aria-label="选择多个 PDF"><span class="batch-upload-icon" aria-hidden="true">＋</span><h3>一次导入多篇论文</h3><p>拖入多个 PDF，或点击选择；选好后再点击“开始批量导入”。</p><span>每批最多 20 篇 · 文件总计不超过 50 MiB</span></div>
+                <p class="batch-select-hint">多选方法：Mac 按住 <kbd>Command ⌘</kbd>、Windows 按住 <kbd>Ctrl</kbd>，再逐个点击文件；选择连续文件时，先选第一篇，再按住 <kbd>Shift</kbd> 点击最后一篇。也可以直接拖入多个 PDF。</p>
                 <input id="batchFileInput" type="file" multiple accept="application/pdf,.pdf" hidden>
                 <div class="batch-selection-header"><strong id="batchQueueSummary">还没有选择文件</strong><button type="button" class="text-button" id="clearBatchQueue">清空待上传列表</button></div><div id="batchQueue" class="batch-file-queue"></div>
                 <label class="batch-note-field">本批统一备注（可选）<textarea id="batchNotes" rows="2" maxlength="4000" placeholder="例如：注意力机制课程资料，待精读"></textarea><small>应用到本批新导入论文；已有重复文件的备注不变。入库后可逐篇修改。</small></label>

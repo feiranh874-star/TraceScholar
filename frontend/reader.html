@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>论文阅读 · TraceScholar</title>
     <link rel="stylesheet" href="/assets/app.css?v=11" />
-    <link rel="stylesheet" href="/assets/reader.css?v=3" />
-    <script src="/assets/reader.js?v=3" defer></script>
-    <script src="/assets/reader-figures.js?v=1" defer></script>
+    <link rel="stylesheet" href="/assets/reader.css?v=4" />
+    <script src="/assets/reader.js?v=4" defer></script>
+    <script src="/assets/reader-figures.js?v=2" defer></script>
     <script src="/assets/reader-plus.js?v=2" defer></script>
   </head>
   <body class="reader-page">
@@ -23,12 +23,12 @@
         <progress id="ocrProgress" value="0" max="1" aria-label="已处理的扫描页数"></progress>
         <p class="reader-hint" id="ocrDetail">OCR 在服务端运行，不调用大模型；识别完成后才能检索和翻译扫描文字。</p>
       </section>
-      <details class="reader-info"><summary>论文信息与版本提示</summary><div class="reader-metadata-grid" id="readerMetadata"></div><p id="readerWarnings" class="reader-hint"></p></details>
+      <details class="reader-info"><summary>论文信息与版本提示</summary><div class="reader-metadata-grid" id="readerMetadata"></div><p id="readerWarnings" class="reader-hint"></p><div class="reader-extra-links"><button id="refreshAuthors" type="button">补识别作者</button><span id="authorRefreshStatus" role="status"></span></div></details>
       <div class="reader-layout">
         <section class="reader-document" aria-label="原版论文">
           <div class="reader-document-toolbar">
             <div class="page-controls"><button id="prevPage" aria-label="上一页">←</button><label class="sr-only" for="pageNumber">页码</label><input id="pageNumber" type="number" min="1" value="1" /><span id="pageTotal">/ —</span><button id="nextPage" aria-label="下一页">→</button></div>
-            <div class="reader-fit-tools"><button class="reader-fit-button" id="showPageFigures" type="button">查看本页表格与图片</button><button class="reader-fit-button" id="fitPage" type="button">适应整页</button><label for="readerZoom" class="sr-only">缩放</label><input id="readerZoom" type="range" min="60" max="180" value="100" /><span id="readerZoomLabel">100%</span></div>
+            <div class="reader-fit-tools"><button class="reader-fit-button" id="showPageFigures" type="button">查看本页表格与图片</button><button class="reader-fit-button" id="fitWidth" type="button" aria-pressed="true">适应宽度</button><button class="reader-fit-button" id="fitPage" type="button">适应整页</button><label for="readerZoom" class="sr-only">缩放</label><input id="readerZoom" type="range" min="60" max="180" value="100" /><span id="readerZoomLabel">宽度</span></div>
           </div>
           <div class="reader-canvas" id="readerCanvas"><div class="reader-image-stage"><div class="reader-page-sheet"><img id="originalPdfImage" alt="当前页原版 PDF" /><div id="sourceHighlights" aria-hidden="true"></div></div><span id="imageStatus" role="status">正在加载原版页面…</span></div></div>
           <p class="reader-document-caption" id="readerPageLabel">原版页面 · 第 1 页</p>

@@ -49,3 +49,12 @@ test('evidence navigation preserves its page and return destination',()=>{
   open('paper-id',null,4);
   assert.equal(url,'/reader/paper-id?page=4&from=research');
 });
+test('fit width fills the reader frame while whole-page mode fits both dimensions',()=>{
+  const cells={originalPdfImage:{naturalWidth:600,naturalHeight:800,style:{}},readerCanvas:{clientWidth:820,clientHeight:510},readerZoomLabel:{},fitPage:{setAttribute(){}},fitWidth:{setAttribute(){}}};
+  const state={fit:false,zoom:100};
+  const start=reader.indexOf('  function fitImage()'),end=reader.indexOf('  async function refreshText',start);
+  const fit=vm.runInNewContext(`${reader.slice(start,end)}\nfitImage`,{state,el:id=>cells[id]});
+  fit();assert.equal(cells.originalPdfImage.style.width,'812px');assert.equal(cells.readerZoomLabel.textContent,'宽度');
+  state.fit=true;fit();assert.equal(cells.originalPdfImage.style.width,'377px');assert.equal(cells.readerZoomLabel.textContent,'整页');
+  state.fit=false;state.zoom=150;fit();assert.equal(cells.originalPdfImage.style.width,'1218px');
+});

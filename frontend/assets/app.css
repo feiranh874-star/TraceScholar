@@ -3086,3 +3086,6 @@ button.tool-result-card { cursor: pointer; }
 .batch-history-row { display:flex; width:100%; align-items:center; gap:18px; justify-content:space-between; text-align:left; background:none; border:0; border-bottom:1px solid #edf0f6; color:#68718a; padding:16px 0; font:inherit; font-size:13px; cursor:pointer; }
 .batch-history-row small { color:#989cb2; flex-shrink:0; }
 @media(max-width:640px) { .batch-upload-card, .batch-job-card { padding:18px; } .batch-selection-header { flex-wrap:wrap; } .batch-result-title { flex-direction:column; gap:8px; } .batch-start-row .primary-button { width:100%; justify-content:center; } }
+
+.batch-select-hint { margin: 12px 2px 20px; color: var(--ink-soft); font-size: 12px; line-height: 1.9; }
+.batch-select-hint kbd { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; background: white; font: inherit; white-space: nowrap; }

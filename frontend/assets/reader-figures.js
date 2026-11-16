@@ -52,14 +52,25 @@
     el('figuresHeading').textContent = '本页表格与图片 · 第 ' + number + ' 页';
     el('figuresWorkspace').href = '/workspace?paper=' + paperId + '&page=' + number + '&tab=layout&analyze=1';
     try {
-      const response = await fetch('/api/papers/' + paperId + '/analysis/' + number);
-      const data = await response.json(); if (!response.ok) throw new Error(data.detail || '图表提取失败');
+      const response = await fetch('/api/papers/' + paperId + '/analysis/' + number, {cache:'no-store'});
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(data.detail || '图表提取失败'); error.status = response.status; throw error;
+      }
       if (ticket !== generation || number !== page()) return;
       output.replaceChildren(); loadedPage = number;
       const items = [...data.tables, ...data.figures];
       if (!items.length) output.append(node('p', '本页没有自动定位到表格或图片。可以翻到包含图表的一页再试；扫描表格的结构化识别需要后续接入视觉模型。'), sourceLink(number, '查看完整原页'));
       else for (const item of items) output.append(renderItem(item, data));
-    } catch (error) { if (ticket === generation) { loadedPage = null; output.textContent = error.message; } }
+    } catch (error) {
+      if (ticket !== generation || number !== page()) return;
+      loadedPage = null;
+      if (error.status === 404) {
+        output.replaceChildren(node('p', '无法读取这条论文的图表资料。这是资料访问失败，不是“表格未识别”。旧阅读页可能已失效，或服务重启后临时资料丢失；请返回论文库核对，再从当前记录打开。', 'reader-notice'));
+        const back = node('a', '返回论文库核对'); back.href = '/?view=library'; output.append(back);
+      } else if (error.status === 429) output.textContent = '另一个页面正在解析图表，请稍后点“重新识别本页图表”。';
+      else output.textContent = error.message;
+    }
     finally { if (ticket === generation) el('reloadPageFigures').disabled = false; }
   }
   el('showPageFigures').onclick = () => {

@@ -22,8 +22,8 @@
 .reader-fit-tools input { width: 90px; accent-color: var(--primary); }
 .reader-fit-tools > span { width: 38px; color: var(--muted); font-size: 11px; }
 .reader-fit-button { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: white; color: var(--primary-strong); font-size: 12px; white-space: nowrap; }
-.reader-canvas { height: clamp(420px, calc(100dvh - 245px), 1040px); overflow: auto; background: #e7eaf1; }
-.reader-image-stage { display: flex; align-items: flex-start; justify-content: center; width: max-content; min-width: 100%; min-height: 100%; padding: 18px; }
+.reader-canvas { height: clamp(420px, calc(100dvh - 210px), 1100px); overflow: auto; background: #e7eaf1; }
+.reader-image-stage { display: flex; align-items: flex-start; justify-content: center; width: max-content; min-width: 100%; min-height: 100%; padding: 4px; }
 .reader-image-stage img { display: block; height: auto; max-width: none; background: white; box-shadow: 0 3px 12px #17203324; }
 .reader-image-stage img:not([src]) { display: none; }
 #imageStatus { padding: 30px 10px; color: var(--muted); font-size: 13px; }
@@ -66,8 +66,8 @@
   .reader-main { padding: 16px 14px 30px; }
   .reader-document-toolbar { padding: 12px; gap: 10px; }
   .reader-fit-tools input { width: 70px; }
-  .reader-canvas { height: max(420px, calc(100dvh - 270px)); }
-  .reader-image-stage { padding: 12px; }
+  .reader-canvas { height: max(420px, calc(100dvh - 240px)); }
+  .reader-image-stage { padding: 4px; }
   .reader-metadata-grid { grid-template-columns: 1fr 1fr; }
   .reader-text-panel, .reader-ocr { padding: 18px; }
   .ocr-summary { flex-direction: column; align-items: stretch; gap: 12px; }
@@ -100,3 +100,5 @@
 .reader-figure-card .reader-extra-links { margin-top:20px; }
 .reader-figure-card details { font-size:13px; color:#7b839a; margin-top:12px; }
 @media(max-width:640px) { .reader-figures { padding:18px; } .reader-figure-card { padding:14px; } .reader-fit-tools { flex-wrap:wrap; } }
+
+.reader-fit-button[aria-pressed="true"] { background: var(--primary-pale); border-color: var(--primary); }
