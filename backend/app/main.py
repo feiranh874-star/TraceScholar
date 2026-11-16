@@ -24,6 +24,7 @@ from app.jobs import router as jobs_router
 from app.agent_tools import router as tools_router
 from app.research_extensions import router as extensions_router
 from app.tracking import router as tracking_router
+from app.organizer import router as organizer_router
 
 
 def health() -> dict[str, str]:
@@ -78,7 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(library_router)
     application.include_router(charts_router)
     application.include_router(discovery_router)
-    for router in (analysis_router, operations_router, jobs_router, tools_router, extensions_router, tracking_router):
+    for router in (analysis_router, operations_router, jobs_router, tools_router, extensions_router, tracking_router, organizer_router):
         application.include_router(router)
     if ASSETS_DIR.exists():
         application.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="frontend-assets")

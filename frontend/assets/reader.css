@@ -86,3 +86,17 @@
 .reader-bilingual article { padding:18px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft);max-height:550px;min-height:180px;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.9; }
 #bilingualPanel h2 { font-size:16px;margin:0; }
 @media(max-width:700px) { .reader-bilingual { grid-template-columns:1fr; } }
+.reader-figures { scroll-margin-top:24px; padding:28px; }
+.reader-figures h2 { margin:0; font-size:20px; }
+.reader-figure-card { margin:24px 0; padding:24px; border:1px solid #e0e4ef; border-radius:14px; background:white; }
+.reader-figure-card h3 { margin-top:0; font-size:18px; }
+.reader-figure-card>a { display:block; background:#f4f5fa; border:1px solid #e5e6ee; padding:12px; border-radius:10px; text-align:center; }
+.reader-figure-card img { display:block; width:100%; max-width:1000px; height:auto; margin:auto; }
+.reader-figure-card h4 { font-size:14px; color:#525d76; margin:24px 0 12px; }
+.reader-table-scroll { max-width:100%; overflow-x:auto; }
+.reader-table-scroll table { width:100%; border-collapse:collapse; font-size:13px; color:#3b465e; }
+.reader-table-scroll th, .reader-table-scroll td { border:1px solid #e0e4ef; padding:10px 12px; line-height:1.7; vertical-align:top; }
+.reader-table-scroll th { background:#f4f2ff; color:#625b9b; font-weight:600; }
+.reader-figure-card .reader-extra-links { margin-top:20px; }
+.reader-figure-card details { font-size:13px; color:#7b839a; margin-top:12px; }
+@media(max-width:640px) { .reader-figures { padding:18px; } .reader-figure-card { padding:14px; } .reader-fit-tools { flex-wrap:wrap; } }

@@ -12,3 +12,8 @@
 .diagram-preview{overflow:auto;padding:18px;background:#fbfbff;border:1px solid var(--line);border-radius:12px}.diagram-preview svg{display:block;width:100%;min-width:500px;max-height:650px}.workspace-main button:focus-visible,.workspace-tabs button:focus-visible{outline:3px solid #8781d9;outline-offset:3px}
 
 .workspace-main .workspace-answer{white-space:pre-wrap;color:var(--ink);font-size:14px;line-height:1.9;margin:9px 0}
+#workspacePaperSearch { width:100%; padding:12px 14px; border:1px solid #dce0ed; border-radius:10px; font:inherit; }
+.paper-choices small { display:block; color:#9298ac; font-size:12px; margin-top:4px; }
+.workspace-row .paper-picker { min-width:0; }
+.workspace-row>label:has(.paper-picker) { flex:1 1 240px; }
+.version-columns { overflow-wrap:anywhere; }

@@ -263,9 +263,10 @@
 
   function filteredPapers() {
     const query = searchQuery();
-    if (!query) return state.papers;
-    return state.papers.filter((paper) =>
-      [paper.title, paper.author, paper.filename]
+    const scoped = window.TraceLibrary.filter(state.papers);
+    if (!query) return scoped;
+    return scoped.filter((paper) =>
+      [paper.title, paper.author, paper.filename, paper.notes]
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase("zh-CN").includes(query)),
     );
@@ -312,6 +313,7 @@
   }
 
   function renderLibrary() {
+    if (window.TraceLibrary.render(state.papers)) return;
     const papers = filteredPapers();
     const hasAnyPapers = state.papers.length > 0;
     const hasSearch = Boolean(searchQuery());
@@ -323,9 +325,9 @@
       const heading = elements.libraryEmpty.querySelector("h3");
       const description = elements.libraryEmpty.querySelector("p");
       const action = elements.libraryEmpty.querySelector("button");
-      if (hasAnyPapers && hasSearch) {
-        heading.textContent = "没有找到匹配的论文";
-        description.textContent = "试试题名、作者或文件名中的其他关键词。";
+      if (hasAnyPapers && (hasSearch || window.TraceLibrary.hasFolder())) {
+        heading.textContent = hasSearch ? "没有找到匹配的论文" : "收藏夹中还没有论文";
+        description.textContent = "试试题名、作者、文件名或备注中的其他关键词。";
         action.textContent = "清除搜索";
         action.dataset.clearSearch = "true";
         delete action.dataset.goImport;
@@ -349,14 +351,14 @@
             <td>
               <button class="table-paper" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
                 <span class="table-paper-icon" aria-hidden="true">PDF</span>
-                <span class="table-paper-copy"><strong class="table-paper-title" title="${escapeHtml(paperTitle(paper))}">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file" title="${escapeHtml(paper.filename)}">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small></span>
+                <span class="table-paper-copy"><strong class="table-paper-title" title="${escapeHtml(paperTitle(paper))}">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file" title="${escapeHtml(paper.filename)}">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small>${paper.notes ? `<small class="paper-note-preview">备注：${escapeHtml(paper.notes)}</small>` : ""}</span>
               </button>
             </td>
             <td><span class="table-paper-authors" title="${escapeHtml(paperAuthor(paper))}">${escapeHtml(paperAuthor(paper))}</span></td>
             <td class="table-nowrap">${paper.page_count} 页</td>
             <td><span class="status-badge ${status.className}">${status.label}</span></td>
             <td><span class="table-paper-date" title="${escapeHtml(formatDate(paper.created_at, true))}">${formatDate(paper.created_at)}</span></td>
-            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button><button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button></div></td>
+            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-organize-paper="${escapeHtml(paper.paper_id)}">整理</button><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button><button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button></div></td>
           </tr>
         `;
       })
@@ -389,6 +391,7 @@
     if (state.papers.some((paper) => paper.paper_id === currentValue)) {
       elements.researchPaperScope.value = currentValue;
     }
+    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true });
     const selectedIds = new Set(state.comparisonPaperIds);
     const selectedCount = selectedIds.size;
     elements.comparisonPaperList.innerHTML = state.papers.map((paper) => {
@@ -779,6 +782,7 @@
       if (!response.ok) throw await responseError(response);
       const payload = await response.json();
       state.papers = Array.isArray(payload.items) ? payload.items : [];
+      await window.TraceLibrary.load();
       state.total = Number(payload.total) || state.papers.length;
       renderToolPapers();
       renderAll();
@@ -923,9 +927,12 @@
     state.uploading = true;
     navigateTo("import");
     showUploadProgress(file);
+    const savedNotes = state.pendingUpload?.notes;
     state.pendingUpload = null;
     const formData = new FormData();
     formData.append("file", file, file.name);
+    const notes = savedNotes ?? byId("importNotes").value;
+    formData.append("notes", notes);
     formData.append("conflict_action", decision.action || "ask");
     if (decision.target) {
       formData.append("target_paper_id", decision.target.paper_id);
@@ -937,7 +944,7 @@
       if (response.status === 409 && !decision.action) {
         const conflict = await response.json();
         if (conflict.conflict) {
-          state.pendingUpload = { file, conflict };
+          state.pendingUpload = { file, conflict, notes };
           elements.uploadProgress.classList.add("is-hidden");
           elements.uploadResult.classList.remove("is-hidden");
           const newer = conflict.recommendation === "keep_existing_newer";
@@ -959,6 +966,7 @@
       if (!response.ok) throw await responseError(response);
       const paper = await response.json();
       state.pendingUpload = null;
+      if (!paper.duplicate) byId("importNotes").value = "";
       showUploadResult(paper, true);
       await loadPapers({ quiet: true });
       showToast(paper.duplicate ? "论文已存在，已为你打开原有记录。" : "论文导入成功。", "success");
@@ -1216,6 +1224,7 @@
   }
 
   async function initialize() {
+    window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast });
     bindEvents();
     const initialView = new URLSearchParams(window.location.search).get("view");
     navigateTo(Object.hasOwn(viewLabels, initialView) ? initialView : "overview");

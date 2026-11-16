@@ -157,6 +157,8 @@ def _public_paper(metadata: dict[str, Any], *, duplicate: bool = False) -> dict[
         "author": metadata.get("author"),
         "authors": metadata.get("authors", []),
         "abstract": metadata.get("abstract"),
+        "notes": metadata.get("notes", ""),
+        "collection_ids": metadata.get("collection_ids", []),
         "identifiers": identifiers,
         "arxiv_id": identifiers.get("arxiv_id"),
         "doi": identifiers.get("doi"),
@@ -236,9 +238,14 @@ def upload_paper(
     conflict_action: str = Form(default="keep_both"),
     target_paper_id: str = Form(default=""),
     target_sha256: str = Form(default=""),
+    notes: str = Form(default="", max_length=4000),
 ) -> dict[str, Any]:
     """Upload a PDF and persist extracted page text with 1-based page numbers."""
 
+    # Internal batch/discovery callers omit the HTTP-only Form default.
+    notes = notes.strip() if isinstance(notes, str) else ""
+    if len(notes) > 4000:
+        raise HTTPException(422, "备注不能超过 4000 字。")
     if conflict_action not in {"ask", "keep_both", "replace"}:
         raise HTTPException(422, "Invalid conflict action")
     papers_dir = _papers_dir()
@@ -342,6 +349,7 @@ def upload_paper(
                 filename=filename,
                 sha256=sha256,
                 **extracted,
+                notes=notes,
                 parse_status=parse_status,
                 needs_ocr_pages=needs_ocr_pages,
                 section_count=len(sections),
@@ -392,8 +400,13 @@ def upload_paper(
 def list_papers(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    q: str = Query(default="", max_length=500),
 ) -> dict[str, Any]:
     papers = [_public_paper(metadata) for metadata in _all_metadata()]
+    if isinstance(q, str) and q.strip():
+        term = q.strip().casefold()
+        papers = [p for p in papers if any(term in str(p.get(k) or "").casefold()
+                  for k in ("title", "author", "filename", "notes"))]
     papers.sort(key=lambda item: item["created_at"], reverse=True)
     return {"items": papers[offset : offset + limit], "total": len(papers)}
 
@@ -454,6 +467,7 @@ def get_paper_chunks(
     paper_id: uuid.UUID,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    q: str = Query(default="", max_length=500),
 ) -> dict[str, Any]:
     _load_paper(paper_id)
     structure_path = _papers_dir() / str(paper_id) / "structure.json"

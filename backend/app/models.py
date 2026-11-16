@@ -130,6 +130,8 @@ class PaperMetadataRecord(BaseModel):
     author: str | None = None
     authors: list[str] = Field(default_factory=list)
     abstract: str | None = None
+    notes: str = Field(default="", max_length=4000)
+    collection_ids: list[str] = Field(default_factory=list)
     identifiers: SourceIdentifiers = Field(default_factory=SourceIdentifiers)
     version_label: str | None = None
     version_number: int | None = Field(default=None, ge=1)
