@@ -212,6 +212,7 @@ def test_external_search_distinguishes_upstream_failures(client, monkeypatch, fa
 
 
 def test_external_search_separates_empty_results_from_invalid_upstream_response(client, monkeypatch):
+    monkeypatch.setattr(discovery.time, 'sleep', lambda _: None)
     monkeypatch.setattr(discovery, 'fetch', lambda *args: b'<feed xmlns="http://www.w3.org/2005/Atom"/>')
     response = client.post('/api/library/search', json={'query': 'Unknown paper title'})
     assert response.status_code == 200
@@ -220,3 +221,54 @@ def test_external_search_separates_empty_results_from_invalid_upstream_response(
     response = client.post('/api/library/search', json={'query': 'Unknown paper title'})
     assert response.status_code == 502
     assert '无法解析' in response.json()['detail']
+
+
+def test_external_search_normalizes_long_title_and_removes_stopwords(client, monkeypatch):
+    calls=[]
+    monkeypatch.setattr(discovery, 'fetch', lambda url, *args: calls.append(url) or b'<feed xmlns="http://www.w3.org/2005/Atom"/>')
+    monkeypatch.setattr(discovery.time, 'sleep', lambda _: None)
+    client.post('/api/library/search', json={'query':'Born in the Dark: The Catastrophic Collapse of Fuzzy Dark Matter Solitons as the Origin of Little Red Dots'})
+    query=discovery.urllib.parse.parse_qs(discovery.urllib.parse.urlparse(calls[0]).query)['search_query'][0]
+    assert 'ti:as' not in query and 'ti:the' not in query
+    assert query.count('ti:dark') == 1
+    assert len(calls) == 2
+
+
+def test_external_search_relaxes_empty_title_once_and_marks_candidates(client, monkeypatch):
+    calls=[]; waits=[]
+    xml=b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/2601.00044v3</id><title>Born in the Dark: The Catastrophic Collapse of Fuzzy Dark Matter Solitons</title></entry></feed>'
+    def fake(url, *args):
+        calls.append(url)
+        return b'<feed xmlns="http://www.w3.org/2005/Atom"/>' if len(calls) == 1 else xml
+    monkeypatch.setattr(discovery, 'fetch', fake)
+    monkeypatch.setattr(discovery.time, 'sleep', waits.append)
+    result=client.post('/api/library/search', json={'query':'Born in the Dark: The Catastrophic Collapse of Fuzzy Dark Matter So'}).json()
+    assert len(calls) == 2 and waits == [3]
+    query=discovery.urllib.parse.parse_qs(discovery.urllib.parse.urlparse(calls[1]).query)['search_query'][0]
+    assert 'ti:so' not in query
+    assert ' OR ' not in query
+    assert result['items'][0]['arxiv_id'] == '2601.00044v3'
+    assert result['search_mode'] == 'keywords'
+    assert '相近论文' in result['notice']
+
+
+def test_external_search_does_not_retry_successful_query(client, monkeypatch):
+    calls=[]
+    xml=b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1706.03762v7</id><title>Attention Is All You Need</title></entry></feed>'
+    monkeypatch.setattr(discovery, 'fetch', lambda url, *args: calls.append(url) or xml)
+    result=client.post('/api/library/search', json={'query':'Attention Is All You Need'}).json()
+    assert len(calls) == 1
+    assert result['search_mode'] == 'title'
+
+
+@pytest.mark.parametrize('payload', [
+    b'<html><body>Temporary error</body></html>',
+    b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/api/errors#query</id><title>Error</title></entry></feed>',
+    b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>unknown-record-format</id></entry></feed>',
+])
+def test_external_search_does_not_disguise_upstream_error_as_no_results(client, monkeypatch, payload):
+    calls=[]
+    monkeypatch.setattr(discovery, 'fetch', lambda *args: calls.append(True) or payload)
+    response=client.post('/api/library/search', json={'query':'Born in the Dark catastrophic collapse'})
+    assert response.status_code == 502
+    assert len(calls) == 1

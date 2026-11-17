@@ -5,6 +5,8 @@ import logging
 import re
 import socket
 import ssl
+import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -64,28 +66,57 @@ class ImportRequest(BaseModel):
     target_paper_id: str=''
     target_sha256: str=''
 
-@router.post('/search')
-def search(body: SearchRequest):
-    # Tokenized title search prevents query syntax from becoming an unrestricted expression.
-    stopwords={'a','an','the','is','are','all','you','of','for','to','and','in','on','with','from','by'}
-    words=[word for word in re.findall(r'[\w-]+',body.query) if word.casefold() not in stopwords][:15]
-    if not words: raise HTTPException(422,'请输入有效论文题名。')
+def _title_words(title: str) -> list[str]:
+    # Quoted operators/punctuation never become part of the arXiv query language.
+    stopwords={'a','an','the','is','are','all','you','of','for','to','and','in','on','with','from','by',
+               'as','at','be','been','being','was','were','it','its','that','this','these','those','or','but','into','via'}
+    words=re.findall(r'[^\W_]+', unicodedata.normalize('NFKC', title), flags=re.UNICODE)
+    return list(dict.fromkeys(word.casefold() for word in words if word.casefold() not in stopwords))[:15]
+
+
+def _search_title(words: list[str]) -> list[dict]:
     query=' AND '.join('ti:'+word for word in words)
     url='https://export.arxiv.org/api/query?'+urllib.parse.urlencode({'search_query':query,'max_results':5})
     payload=fetch(url,1024*1024,{'export.arxiv.org'})
     try: root=ET.fromstring(payload)
     except ET.ParseError as error: raise HTTPException(502,'论文搜索接口返回了无法解析的数据。') from error
+    if root.tag != '{http://www.w3.org/2005/Atom}feed':
+        raise HTTPException(502,'论文搜索接口返回了异常响应，请稍后重试。')
     ns={'a':'http://www.w3.org/2005/Atom'}; items=[]
-    for entry in root.findall('a:entry',ns):
+    entries = root.findall('a:entry',ns)
+    for entry in entries:
         identifier=(entry.findtext('a:id','',ns)).rstrip('/').split('/')[-1]
+        if '/api/errors' in entry.findtext('a:id','',ns):
+            raise HTTPException(502,'论文搜索接口未能处理题名查询，请稍后重试或缩短题名。')
         if not ARXIV_ID.fullmatch(identifier): continue
         items.append({'arxiv_id':identifier,'title':' '.join(entry.findtext('a:title','',ns).split()),
                       'authors':[a.findtext('a:name','',ns) for a in entry.findall('a:author',ns)],
                       'summary':' '.join(entry.findtext('a:summary','',ns).split())[:1600],
                       'url':'https://arxiv.org/abs/'+identifier,'pdf_url':'https://arxiv.org/pdf/'+identifier})
+    if entries and not items:
+        raise HTTPException(502,'论文搜索接口返回了当前无法识别的论文记录，请前往 arXiv 官网核对。')
+    return items
+
+
+@router.post('/search')
+def search(body: SearchRequest):
+    words = _title_words(body.query)
+    if not words: raise HTTPException(422,'请输入有效论文题名。')
+    items = _search_title(words)
+    mode = 'title'
+    # Keep at most six distinctive words when a long/incomplete title has no hit.
+    # There is only one fallback request, and never a retry after an upstream error.
+    candidates = sorted(range(len(words)), key=lambda index: -len(words[index]))
+    chosen = sorted(index for index in candidates[:6] if len(words[index]) >= 4)
+    fallback = [words[index] for index in chosen]
+    if not items and 2 <= len(fallback) < len(words):
+        time.sleep(3)  # Respect the public API's requested spacing between calls.
+        items = _search_title(fallback)
+        mode = 'keywords'
     normalize = lambda title: re.sub(r'\W+', '', title.casefold())
     items.sort(key=lambda item: normalize(item['title']) != normalize(body.query))
-    return {'items':items,'source':'arXiv title search','notice':'请核对题名、作者及版本，再确认导入。主题定时追踪请使用研究工作区。'}
+    notice = '已改用关键题名词检索，结果可能为相近论文，请核对完整题名、作者及版本后再导入。' if mode == 'keywords' else '请核对题名、作者及版本，再确认导入。'
+    return {'items':items,'source':'arXiv title search','search_mode':mode,'notice':notice}
 
 @router.post('/import', status_code=201)
 def import_arxiv(body: ImportRequest):
