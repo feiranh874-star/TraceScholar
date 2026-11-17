@@ -265,6 +265,10 @@ def resume(identifier:uuid.UUID,request:Request):
         settings=request.app.state.settings
         if not settings.llm_api_key:raise HTTPException(503,'请先配置模型接口。')
         runner=_translation_runner(settings)
+    if record['kind']=='vision':
+        from app.vision import require_config, runner as vision_runner
+        require_config(request.app.state.settings)
+        runner=vision_runner(request.app.state.settings)
     if runner is None: raise HTTPException(422,'此任务不支持恢复。')
     with ocr._LOCK:
         if any(pid in ocr._ACTIVE for pid in record['paper_ids']):raise HTTPException(409,'请等待 OCR 完成。')

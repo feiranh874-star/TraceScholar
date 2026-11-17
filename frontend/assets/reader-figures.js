@@ -3,7 +3,7 @@
   const el = id => document.getElementById(id);
   const paperId = location.pathname.split('/').filter(Boolean)[1];
   const page = () => Number(el('pageNumber').value) || 1;
-  let generation = 0, loadedPage = null;
+  let generation = 0, loadedPage = null, pendingPage = null;
   const node = (tag, text, className) => {
     const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e;
   };
@@ -15,7 +15,7 @@
   function renderTable(rows) {
     const wrap = node('div', undefined, 'reader-table-scroll'), table = node('table');
     rows.forEach((row, index) => {
-      const tr = node('tr'); for (const cell of row) tr.append(node(index ? 'td' : 'th', cell ?? '未识别 / 合并单元格'));
+      const tr = node('tr'); for (const cell of row) tr.append(node(index ? 'td' : 'th', cell ?? ''));
       if (!index) { const head = node('thead'); head.append(tr); table.append(head); }
       else { let body = table.tBodies[0]; if (!body) { body = node('tbody'); table.append(body); } body.append(tr); }
     });
@@ -45,10 +45,13 @@
   }
   async function analyze(force = false) {
     const number = page();
-    if (!force && loadedPage === number) return;
+    if (pendingPage === number || (!force && loadedPage === number)) return;
+    pendingPage = number;
     const ticket = ++generation;
     loadedPage = null;
-    const output = el('pageFiguresResult'); output.textContent = '正在提取第 ' + number + ' 页图表…'; el('reloadPageFigures').disabled = true;
+    const target = el('pageFiguresResult'), visionHost = node('div'), output = node('div');
+    target.replaceChildren(visionHost, output); window.TraceVision.mount(visionHost, paperId, number);
+    output.textContent = '正在提取第 ' + number + ' 页图表…'; el('reloadPageFigures').disabled = true;
     el('figuresHeading').textContent = '本页表格与图片 · 第 ' + number + ' 页';
     el('figuresWorkspace').href = '/workspace?paper=' + paperId + '&page=' + number + '&tab=layout&analyze=1';
     try {
@@ -60,7 +63,7 @@
       if (ticket !== generation || number !== page()) return;
       output.replaceChildren(); loadedPage = number;
       const items = [...data.tables, ...data.figures];
-      if (!items.length) output.append(node('p', '本页没有自动定位到表格或图片。可以翻到包含图表的一页再试；扫描表格的结构化识别需要后续接入视觉模型。'), sourceLink(number, '查看完整原页'));
+      if (!items.length) output.append(node('p', '本地解析没有自动定位到表格或图片。可以使用上方“视觉识别本页”，或翻到包含图表的一页再试。'), sourceLink(number, '查看完整原页'));
       else for (const item of items) output.append(renderItem(item, data));
     } catch (error) {
       if (ticket !== generation || number !== page()) return;
@@ -71,7 +74,7 @@
       } else if (error.status === 429) output.textContent = '另一个页面正在解析图表，请稍后点“重新识别本页图表”。';
       else output.textContent = error.message;
     }
-    finally { if (ticket === generation) el('reloadPageFigures').disabled = false; }
+    finally { if (ticket === generation) { pendingPage = null; el('reloadPageFigures').disabled = false; } }
   }
   el('showPageFigures').onclick = () => {
     el('pageFiguresPanel').hidden = false; analyze(); el('pageFiguresPanel').scrollIntoView({behavior:'smooth', block:'start'});

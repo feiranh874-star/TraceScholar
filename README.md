@@ -77,6 +77,8 @@ uvicorn app.main:app --reload --port 8000
 
 复制 `.env.example` 为 `.env`。本地证据检索无需模型配置；如需生成回答，请自行填写 `LLM_API_KEY`，并使用 `LLM_PROVIDER=deepseek`、`LLM_BASE_URL=https://api.deepseek.com`、`LLM_MODEL=deepseek-flash`。本地启动后端需加 `--env-file ../.env` 才会读取该文件；Render 部署应在 Environment 中分别添加这四个变量。`.env` 和真实密钥不得提交到 GitHub，也不要发送到聊天中。模型输出不等于事实核验，回答中的引用会映射到本地原文，但仍应核对关键结论。
 
+复杂表格、公式 LaTeX 和图片描述可额外配置豆包视觉接口。阅读页与研究工作区提供手动按页识别及缓存、CSV/JSON 下载；配置和点击测试步骤见 [视觉接口指南](docs/VISION_SETUP.md)。
+
 ## 公网演示
 
 已提供 Dockerfile、Compose、演示账号保护、上传限流和存储配额；用户已在 Render 部署并确认线上问答和比较可用，云端数据持久性与评审期间可用性仍需单独验收。

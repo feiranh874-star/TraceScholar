@@ -20,6 +20,10 @@ class Settings:
     llm_api_key: str = ""
     llm_model: str = ""
     llm_timeout_seconds: int = 45
+    vision_api_key: str = ""
+    vision_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    vision_model: str = "doubao-seed-2-1-pro-260915"
+    vision_timeout_seconds: int = 120
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -43,6 +47,10 @@ class Settings:
             llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
             llm_model=os.getenv("LLM_MODEL", "").strip(),
             llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "45")),
+            vision_api_key=os.getenv("VISION_API_KEY", "").strip(),
+            vision_base_url=os.getenv("VISION_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3").strip(),
+            vision_model=os.getenv("VISION_MODEL", "doubao-seed-2-1-pro-260915").strip(),
+            vision_timeout_seconds=int(os.getenv("VISION_TIMEOUT_SECONDS", "120")),
         )
         settings.validate()
         return settings
@@ -58,5 +66,7 @@ class Settings:
             raise ValueError("UPLOAD_REQUESTS_PER_MINUTE cannot be negative")
         if self.llm_timeout_seconds < 1:
             raise ValueError("LLM_TIMEOUT_SECONDS must be positive")
+        if not 1 <= self.vision_timeout_seconds <= 300:
+            raise ValueError("VISION_TIMEOUT_SECONDS must be between 1 and 300")
         if self.environment == "production" and not self.upload_requests_per_minute:
             raise ValueError("Production requires a positive upload rate limit")

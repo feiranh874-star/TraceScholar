@@ -94,8 +94,8 @@
 .reader-figure-card img { display:block; width:100%; max-width:1000px; height:auto; margin:auto; }
 .reader-figure-card h4 { font-size:14px; color:#525d76; margin:24px 0 12px; }
 .reader-table-scroll { max-width:100%; overflow-x:auto; }
-.reader-table-scroll table { width:100%; border-collapse:collapse; font-size:13px; color:#3b465e; }
-.reader-table-scroll th, .reader-table-scroll td { border:1px solid #e0e4ef; padding:10px 12px; line-height:1.7; vertical-align:top; }
+.reader-table-scroll table { width:max-content; min-width:100%; border-collapse:collapse; font-size:13px; color:#3b465e; }
+.reader-table-scroll th, .reader-table-scroll td { border:1px solid #e0e4ef; padding:10px 12px; line-height:1.7; vertical-align:top; min-width:65px; max-width:350px; white-space:pre-wrap; word-break:normal; overflow-wrap:normal; }
 .reader-table-scroll th { background:#f4f2ff; color:#625b9b; font-weight:600; }
 .reader-figure-card .reader-extra-links { margin-top:20px; }
 .reader-figure-card details { font-size:13px; color:#7b839a; margin-top:12px; }

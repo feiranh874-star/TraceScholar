@@ -189,7 +189,7 @@ def analyze(paper_id,number):
         return {'paper_id':str(paper_id),'page':number,'width':page.rect.width,'height':page.rect.height,
                 'tables':tables,'figures':figures,'equations':equations,'words':words,'citation_markers':markers,
                 'institution_candidates':institutions,'scan':record.get('text_origin')=='ocr' or record.get('needs_ocr'),
-                'notice':'扫描页可显示原图与 OCR 文字，复杂表格行列、图片理解及公式 LaTeX 需要后续视觉接口。'}
+                'notice':'本地布局解析结果，可能遗漏复杂或扫描图表。可手动使用视觉识别；该功能按模型用量计费。'}
 
 
 @router.get('/{paper_id}/analysis/{page_number}')

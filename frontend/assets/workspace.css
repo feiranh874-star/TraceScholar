@@ -17,3 +17,5 @@
 .workspace-row .paper-picker { min-width:0; }
 .workspace-row>label:has(.paper-picker) { flex:1 1 240px; }
 .version-columns { overflow-wrap:anywhere; }
+
+.analysis-item .answer-table{width:max-content;min-width:100%;table-layout:auto}.analysis-item .answer-table th,.analysis-item .answer-table td{min-width:65px;max-width:350px;white-space:pre-wrap;word-break:normal;overflow-wrap:normal}
