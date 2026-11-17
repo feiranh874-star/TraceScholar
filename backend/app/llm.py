@@ -60,6 +60,17 @@ def build_grounded_messages(
                 ]
             )
         )
+    focus = ANSWER_MODES.get(answer_mode, ANSWER_MODES["general"])
+    paper_count = len({item.source.paper_id for item in evidence})
+    if answer_mode == "comparison" and paper_count > 5:
+        focus = (
+            "Answer only the comparison dimensions explicitly requested. "
+            f"Cover all {paper_count} selected papers: name and cite every paper, using one or two short sentences per paper. "
+            "Group shared findings if useful, but do not omit a selected source. "
+            "Keep each paper's description under 120 Chinese characters or 60 English words, excluding citations. "
+            "Do not add unrelated results, background, or a general conclusion. "
+            "Say when a paper does not report a requested point; never guess."
+        )
     return [
         {
             "role": "system",
@@ -75,7 +86,7 @@ def build_grounded_messages(
                 "For example, describe what quantities are compared or combined instead of writing symbols."
                 " Use short paragraphs, bullets, or a compact Markdown table when comparing verified values. Never output HTML. "
                 "For comparisons, follow the requested scope and length limit strictly. Never expand into unrelated aspects."
-                f" Task focus: {ANSWER_MODES.get(answer_mode, ANSWER_MODES['general'])}"
+                f" Task focus: {focus}"
             ),
         },
         {
@@ -97,9 +108,11 @@ def generate_grounded_answer(
 ) -> str:
     """Call an OpenAI-compatible chat-completions endpoint."""
 
+    paper_count = len({item.source.paper_id for item in evidence})
+    output_budget = min(8000, max(COMPARISON_MAX_TOKENS, paper_count * 240)) if answer_mode == "comparison" else DEFAULT_MAX_TOKENS
     return complete_messages(build_grounded_messages(question, evidence, answer_mode=answer_mode),
                              base_url=base_url, api_key=api_key, model=model, timeout_seconds=timeout_seconds,
-                             max_tokens=COMPARISON_MAX_TOKENS if answer_mode == "comparison" else DEFAULT_MAX_TOKENS)
+                             max_tokens=output_budget)
 
 
 def complete_messages(messages: list[dict[str, str]], *, base_url: str, api_key: str, model: str,

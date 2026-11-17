@@ -13,10 +13,10 @@
   function collectionPaperMatches(paper, collection) {
     return (paper.collection_ids || []).includes(collection.id) || (collection.paper_ids || []).includes(paper.paper_id);
   }
-  function scopeSearch(papers, collections, query) {
-    const folders = collections.filter(c => collectionMatches(c, query));
-    const rows = recent(papers).filter(p => matches(p, query) || folders.some(c => collectionPaperMatches(p, c)));
-    return {folders, papers: rows};
+  function scopeSearch(papers, collections, query, collectionId = '') {
+    const collection = collectionId ? collections.find(c => c.id === collectionId) : null;
+    const rows = recent(papers).filter(p => (!collectionId || (collection && collectionPaperMatches(p, collection))) && matches(p, query));
+    return {papers: rows};
   }
   const recent = papers => [...papers].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   function paginate(papers, requestedPage, pageSize = 10) {
@@ -34,19 +34,43 @@
     if (!picker) {
       if (options.searchFirst) {
         const root = document.createElement('div'); root.className = 'paper-picker paper-picker-search-first';
-        root.innerHTML = '<input type="search" aria-label="搜索检索范围论文" aria-expanded="false" placeholder="搜索论文、备注或收藏夹" autocomplete="off"><div class="picker-selection"><span></span><button type="button" hidden>清除选择</button></div><div class="paper-picker-popover" hidden><small>按入库时间：从新到旧</small><div class="paper-picker-options" role="group" aria-label="选择论文"></div></div>';
+        root.innerHTML = '<div class="scope-collection-row"><button type="button" class="scope-collection-button" aria-haspopup="dialog">收藏夹 <span aria-hidden="true">▾</span></button><span class="scope-collection-status" role="status"></span></div><input type="search" aria-label="搜索检索范围论文" aria-expanded="false" placeholder="搜索论文题名、作者、文件名或备注" autocomplete="off"><div class="picker-selection"><span></span><button type="button" hidden>清除论文选择</button></div><div class="paper-picker-popover" hidden><small>按入库时间：从新到旧</small><div class="paper-picker-options" role="group" aria-label="选择论文"></div></div>';
         select.hidden = true; select.after(root);
-        const search = root.querySelector('input'), list = root.querySelector('.paper-picker-options'), panel = root.querySelector('.paper-picker-popover'), clear = root.querySelector('.picker-selection button');
-        picker = {root, search, papers:[], collections:[], options}; pickers.set(select, picker);
+        const search = root.querySelector('input'), list = root.querySelector('.paper-picker-options'), panel = root.querySelector('.paper-picker-popover'), clear = root.querySelector('.picker-selection button'), folderButton = root.querySelector('.scope-collection-button');
+        picker = {root, search, papers:[], collections:[], collectionId:options.collectionId || '', options}; pickers.set(select, picker);
         const toggle = open => { panel.hidden = !open; search.setAttribute('aria-expanded', String(open)); };
         picker.draw = () => {
           const selected = picker.papers.find(p => p.paper_id === select.value);
-          const selectedFolder = (picker.collections || []).find(c => 'collection:' + c.id === select.value);
-          root.querySelector('.picker-selection span').textContent = selected ? '已选：' + title(selected) : selectedFolder ? '已选收藏夹：' + selectedFolder.name : '未限定论文，将检索整个论文库';
-          clear.hidden = !selected && !selectedFolder;
-          const results = scopeSearch(picker.papers, picker.collections || [], search.value);
-          const rows = results.papers, folders = results.folders;
-          list.innerHTML = folders.map(c => '<button type="button" data-pick="collection:' + esc(c.id) + '" aria-pressed="' + (select.value === 'collection:' + c.id) + '"><strong>收藏夹：' + esc(c.name) + '</strong><small>包含 ' + (c.paper_ids || []).length + ' 篇论文 · 按收藏夹检索</small></button>').join('') + rows.map(p => '<button type="button" data-pick="' + esc(p.paper_id) + '" aria-pressed="' + (select.value === p.paper_id) + '"><strong>' + esc(title(p)) + '</strong><small>' + esc(p.filename) + ' · ' + esc(date(p)) + '</small>' + (p.notes ? '<span class="picker-note">备注：' + esc(p.notes) + '</span>' : '') + '</button>').join('') || '<p class="picker-empty">没有匹配论文，请换个关键词。</p>';
+          const collection = picker.collections.find(c => c.id === picker.collectionId);
+          root.querySelector('.scope-collection-status').textContent = collection ? '已选择：' + collection.name : '全部论文';
+          root.querySelector('.picker-selection span').textContent = selected ? '已选论文：' + title(selected) : collection ? '搜索仅显示该收藏夹内的论文' : '未限定论文，将检索整个论文库';
+          clear.hidden = !selected;
+          search.placeholder = collection ? '在“' + collection.name + '”中搜索论文或备注' : '搜索论文题名、作者、文件名或备注';
+          const rows = scopeSearch(picker.papers, picker.collections, search.value, picker.collectionId).papers;
+          list.innerHTML = rows.map(p => '<button type="button" data-pick="' + esc(p.paper_id) + '" aria-pressed="' + (select.value === p.paper_id) + '"><strong>' + esc(title(p)) + '</strong><small>' + esc(p.filename) + ' · ' + esc(date(p)) + '</small>' + (p.notes ? '<span class="picker-note">备注：' + esc(p.notes) + '</span>' : '') + '</button>').join('') || '<p class="picker-empty">' + (collection ? '此收藏夹中没有匹配论文。' : '没有匹配论文，请换个关键词。') + '</p>';
+        };
+        folderButton.onclick = () => {
+          toggle(false);
+          const dialog = document.createElement('dialog'); dialog.className = 'collection-picker-dialog'; dialog.setAttribute('aria-label', '选择论文收藏夹');
+          dialog.innerHTML = '<header><h2>选择收藏夹</h2><button type="button" data-close aria-label="关闭收藏夹窗口">✕</button></header><input type="search" aria-label="搜索收藏夹" placeholder="搜索收藏夹名称" autofocus><div class="collection-picker-list"></div>';
+          document.body.append(dialog);
+          const folderSearch = dialog.querySelector('input'), folderList = dialog.querySelector('.collection-picker-list');
+          const drawFolders = () => {
+            const folders = picker.collections.filter(c => collectionMatches(c, folderSearch.value));
+            folderList.innerHTML = '<button type="button" data-collection="" aria-pressed="' + (!picker.collectionId) + '"><strong>全部论文</strong><small>取消收藏夹筛选</small></button>' + folders.map(c => '<button type="button" data-collection="' + esc(c.id) + '" aria-pressed="' + (picker.collectionId === c.id) + '"><strong>' + esc(c.name) + '</strong><small>' + (c.paper_ids || []).length + ' 篇论文</small></button>').join('') + (!folders.length ? '<p class="picker-empty">没有匹配的收藏夹，可先在论文库新建。</p>' : '');
+          };
+          folderSearch.oninput = drawFolders;
+          dialog.querySelector('[data-close]').onclick = () => dialog.close();
+          dialog.addEventListener('click', event => { if (event.target === dialog) {const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();} });
+          folderList.onclick = event => {
+            const button = event.target.closest('[data-collection]'); if (!button) return;
+            picker.collectionId = button.dataset.collection;
+            if (picker.options.onCollectionChange) picker.options.onCollectionChange(picker.collectionId);
+            select.value = picker.collectionId ? 'collection:' + picker.collectionId : '';
+            search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); picker.draw(); dialog.close();
+          };
+          dialog.addEventListener('close', () => {dialog.remove();folderButton.focus();});
+          drawFolders(); dialog.showModal();
         };
         search.onfocus = () => { picker.draw(); toggle(true); };
         search.oninput = () => { picker.draw(); toggle(true); };
@@ -55,7 +79,7 @@
           select.value = button.dataset.pick; search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true}));
           search.focus(); toggle(false);
         };
-        clear.onclick = () => { select.value = ''; search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); search.focus(); };
+        clear.onclick = () => { select.value = picker.collectionId ? 'collection:' + picker.collectionId : ''; search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); search.focus(); };
         select.addEventListener('change', picker.draw);
         root.addEventListener('keydown', event => { if (event.key === 'Escape') { toggle(false); search.focus(); } });
         root.addEventListener('focusout', event => { if (!root.contains(event.relatedTarget)) toggle(false); });
@@ -84,7 +108,7 @@
       select.addEventListener('change', picker.draw);
       document.addEventListener('click', event => { if (!root.contains(event.target)) root.open = false; });
     }
-    picker.papers = papers; picker.collections = options.collections || []; picker.options = options; picker.draw();
+    picker.papers = papers; picker.collections = options.collections || []; picker.collectionId = options.collectionId || ''; picker.options = options; picker.draw();
   }
   window.TracePaperUI = {mountPicker, matches, recent, paginate, scopeSearch};
 

@@ -66,9 +66,9 @@ def test_empty_query_and_no_matches_and_out_of_range_page(library):
     assert client.post('/api/research/mentions', json={'question': 'gradient', 'page_size': 0}).status_code == 422
 
 
-def test_comparison_still_requires_small_explicit_scope(library):
+def test_comparison_still_has_a_bounded_explicit_scope(library):
     client, add = library
-    ids = [add('Attention experiment.') for _ in range(6)]
+    ids = [add('Attention experiment.') for _ in range(31)]
     assert client.post('/api/research/compare', json={'question': 'compare attention', 'paper_ids': ids}).status_code == 422
 
 def test_collection_scope_returns_only_members(library, tmp_path):
@@ -106,3 +106,34 @@ def test_collection_and_explicit_paper_are_not_silently_combined(library):
     body = {'question': 'attention', 'collection_id': folder['id'], 'paper_ids': [pid]}
     assert client.post('/api/research/mentions', json=body).status_code == 422
     assert client.post('/api/research/retrieve', json=body).status_code == 422
+
+@pytest.mark.parametrize('count', [6, 12, 30])
+@pytest.mark.parametrize('endpoint', ['compare', 'agent'])
+def test_comparison_covers_more_than_five_papers_even_with_legacy_evidence_limit(library, monkeypatch, count, endpoint):
+    from app import research
+    from app.config import Settings
+    client, add = library
+    ids = [add('Attention maps query and key vectors to weights.') for _ in range(count)]
+    monkeypatch.setattr(client.app.state, 'settings', Settings(llm_api_key='test', llm_base_url='https://example.invalid', llm_model='fixture'))
+    observed = []
+    def generate(question, evidence, **kwargs):
+        observed.extend(item.source.paper_id for item in evidence)
+        return '；'.join(f'{item.paper_title} uses attention [E{i}]' for i, item in enumerate(evidence, 1))
+    monkeypatch.setattr(research, 'generate_grounded_answer', generate)
+    response = client.post('/api/research/' + endpoint, json={'question': 'Compare attention query key', 'paper_ids': ids})
+    assert response.status_code == 200
+    assert not response.json()['insufficient']
+    assert set(observed) == set(ids)
+    assert {item['source']['paper_id'] for item in response.json()['citations']} == set(ids)
+
+
+def test_six_paper_comparison_rejects_answer_omitting_one_source(library, monkeypatch):
+    from app import research
+    from app.config import Settings
+    client, add = library
+    ids = [add('Attention maps query and key vectors to weights.') for _ in range(6)]
+    monkeypatch.setattr(client.app.state, 'settings', Settings(llm_api_key='test', llm_base_url='https://example.invalid', llm_model='fixture'))
+    monkeypatch.setattr(research, 'generate_grounded_answer', lambda *args, **kwargs: 'Attention [E1] [E2] [E3] [E4] [E5]')
+    response = client.post('/api/research/compare', json={'question': 'Compare attention query key', 'paper_ids': ids})
+    assert response.status_code == 502
+    assert '每一篇所选论文' in response.json()['detail']

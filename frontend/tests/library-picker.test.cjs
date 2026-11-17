@@ -18,17 +18,21 @@ test('paper selection sorts by import time and does not mutate library data', ()
   assert.deepEqual(original.map(p=>p.paper_id),['first','latest','middle']);
 });
 
-test('a numeric collection name finds all six member papers once in newest-first order', () => {
+
+test('a selected collection shows all six members in newest-first order, excluding outside matches', () => {
   const members=Array.from({length:6},(_,i)=>({paper_id:'p'+i,title:'Research '+i,created_at:'2026-11-'+String(i+1).padStart(2,'0'),collection_ids:['c12']}));
-  const unrelated={paper_id:'outside',title:'Unrelated research',created_at:'2026-11-30'};
-  const result=helpers.scopeSearch([...members,unrelated],[{id:'c12',name:'12',paper_ids:members.map(p=>p.paper_id)}],' 12 ');
-  assert.equal(result.folders.length,1);
+  const unrelated={paper_id:'outside',title:'Research outside',created_at:'2026-11-30'};
+  const folders=[{id:'c12',name:'12',paper_ids:members.map(p=>p.paper_id)}];
+  const result=helpers.scopeSearch([...members,unrelated],folders,'','c12');
   assert.deepEqual(Array.from(result.papers,p=>p.paper_id),['p5','p4','p3','p2','p1','p0']);
-  assert.equal(helpers.scopeSearch(members,[{id:'empty',name:'Empty',paper_ids:[]}],'empty').papers.length,0);
+  assert.deepEqual(Array.from(helpers.scopeSearch([...members,unrelated],folders,'Research 3','c12').papers,p=>p.paper_id),['p3']);
+  assert.equal(helpers.scopeSearch(members,[{id:'empty',name:'Empty',paper_ids:[]}],'','empty').papers.length,0);
+  assert.equal(helpers.scopeSearch(members,folders,'','deleted').papers.length,0);
 });
-test('direct paper matching still works and a renamed folder uses its current name', () => {
+test('clearing the collection restores global search without treating folder names as paper keywords', () => {
   const papers=[{paper_id:'p1',title:'Attention paper',collection_ids:['c1']},{paper_id:'p2',notes:'read next'}];
-  assert.deepEqual(Array.from(helpers.scopeSearch(papers,[{id:'c1',name:'新名字',paper_ids:['p1']}],'新名字').papers,p=>p.paper_id),['p1']);
-  assert.equal(helpers.scopeSearch(papers,[{id:'c1',name:'新名字'}],'旧名字').papers.length,0);
-  assert.deepEqual(Array.from(helpers.scopeSearch(papers,[],'read next').papers,p=>p.paper_id),['p2']);
+  const folders=[{id:'c1',name:'12',paper_ids:['p1']}];
+  assert.equal(helpers.scopeSearch(papers,folders,'12').papers.length,0);
+  assert.deepEqual(Array.from(helpers.scopeSearch(papers,folders,'read next').papers,p=>p.paper_id),['p2']);
+  assert.equal(helpers.scopeSearch(papers,folders,'read next','c1').papers.length,0);
 });

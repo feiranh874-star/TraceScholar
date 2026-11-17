@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=21" />
+    <link rel="stylesheet" href="/assets/app.css?v=22" />
   </head>
   <body>
     <div class="app-shell">
@@ -80,14 +80,14 @@
               <section class="panel research-compose">
                 <form id="researchForm" novalidate>
                   <label for="researchQuestion"><span>研究问题</span><textarea id="researchQuestion" aria-describedby="researchError" rows="7" minlength="2" maxlength="500" placeholder="例如：Transformer 如何使用 Query、Key 和 Value 计算注意力？" required></textarea></label><p id="researchError" class="field-error" role="alert" hidden></p>
-                  <div id="singlePaperScopeLabel"><span class="field-caption">检索范围 · 可搜索论文、备注或收藏夹</span><select id="researchPaperScope" aria-label="检索范围"><option value="">全部已入库论文</option></select></div>
+                  <div id="singlePaperScopeLabel"><span class="field-caption">检索范围</span><select id="researchPaperScope" aria-label="检索范围"><option value="">全部已入库论文</option></select></div>
                   <button class="comparison-mode-toggle" id="comparisonModeToggle" type="button">切换到多篇比较 <span>→</span></button>
                   <fieldset class="comparison-paper-scope is-hidden" id="comparisonPaperScope">
                     <legend>选择要比较的论文</legend>
-                    <p>至少选择 2 篇，最多选择 5 篇。比较前会分别从每篇论文检索证据。</p>
-                    <div class="comparison-paper-list" id="comparisonPaperList"></div>
+                    <p>至少选择 2 篇，最多选择 30 篇。上方选中收藏夹后，这里只显示其中的论文；比较前会逐篇检查证据。</p>
+                    <div class="comparison-selection-actions"><button id="selectComparisonAll" type="button">选择当前列表（最多 30 篇）</button><button id="clearComparisonAll" type="button">清空勾选</button></div><div class="comparison-paper-list" id="comparisonPaperList"></div>
                   </fieldset>
-                  <p class="tool-hint">想知道哪些论文提过某个信息？在上方填写问题，再点击“全库查找”。选中收藏夹后，只查其中的论文，不受五篇限制。多篇比较用于生成 2–5 篇论文的对比回答。</p><div class="research-actions"><button class="secondary-button" id="searchMentions" type="button">全库查找 · 哪些论文提到过</button><button class="secondary-button" id="researchSubmit" type="submit"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span>只检索原文</span></button><button class="primary-button" id="researchAnswer" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg><span>智能体回答</span></button><button class="primary-button is-hidden" id="researchCompare" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h7v14H4zM13 5h7v14h-7z"/><path d="M7 9h1M7 13h1M16 9h1M16 13h1"/></svg><span>比较所选论文</span></button></div>
+                  <p class="tool-hint">想知道哪些论文提过某个信息？在上方填写问题，再点击“全库查找”。点击“收藏夹”可在悬浮窗口选择范围。多篇比较支持 2–30 篇，会逐篇检查证据。</p><div class="research-actions"><button class="secondary-button" id="searchMentions" type="button">全库查找 · 哪些论文提到过</button><button class="secondary-button" id="researchSubmit" type="submit"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span>只检索原文</span></button><button class="primary-button" id="researchAnswer" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg><span>智能体回答</span></button><button class="primary-button is-hidden" id="researchCompare" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h7v14H4zM13 5h7v14h-7z"/><path d="M7 9h1M7 13h1M16 9h1M16 13h1"/></svg><span>比较所选论文</span></button></div>
                 </form>
                 <div class="research-note"><strong>调用说明</strong><span>“只检索原文”不产生模型费用；“智能体回答”先检索并检查证据，需要生成解释时才调用模型服务。</span></div>
               </section>
@@ -136,8 +136,8 @@
     <input type="file" id="collectionFileInput" accept="application/pdf,.pdf" multiple hidden />
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/assets/library-ui.js?v=6" defer></script>
+    <script src="/assets/library-ui.js?v=7" defer></script>
     <script src="/assets/batch-import.js?v=2" defer></script>
-    <script src="/assets/app.js?v=23" defer></script>
+    <script src="/assets/app.js?v=24" defer></script>
   </body>
 </html>

@@ -589,5 +589,31 @@ def test_comparison_prompt_limits_answer_to_requested_scope():
     assert "Do not add unrelated results, background, or a general conclusion" in prompt
 
 
+@pytest.mark.parametrize("paper_count", [6, 30])
+def test_large_comparison_allocates_room_for_every_paper(monkeypatch, paper_count):
+    evidence = [
+        RetrievalEvidenceRecord(
+            evidence_id=f"paper-{index}:chunk", text="Attention method evidence.", score=1.0,
+            source=SourceReference(paper_id=f"paper-{index}", work_id=f"work-{index}", page_start=1, page_end=1),
+            filename=f"paper-{index}.pdf",
+        )
+        for index in range(paper_count)
+    ]
+    captured = {}
+
+    def complete(messages, **kwargs):
+        captured.update(messages=messages, **kwargs)
+        return "Comparison"
+
+    monkeypatch.setattr("app.llm.complete_messages", complete)
+    generate_grounded_answer("Compare methods", evidence, answer_mode="comparison",
+                             base_url="https://example.test", api_key="test-key", model="test-model")
+    prompt = captured["messages"][0]["content"]
+    assert f"Cover all {paper_count} selected papers" in prompt
+    assert "under 350 Chinese characters" not in prompt
+    assert captured["max_tokens"] >= paper_count * 240
+    assert captured["max_tokens"] <= 8000
+
+
 def test_answer_endpoint_is_in_openapi(client):
     assert "/api/research/answer" in client.get("/openapi.json").json()["paths"]

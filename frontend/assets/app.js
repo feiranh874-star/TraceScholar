@@ -21,6 +21,7 @@
     retrieving: false,
     answering: false,
     comparisonMode: false,
+    researchCollectionId: "",
     comparisonPaperIds: [],
     deletingPaperId: null,
     libraryPage: 1,
@@ -387,7 +388,7 @@
     const selectedCount = checkedInputs.length;
     inputs.forEach((input) => {
       const unavailable = input.closest(".comparison-paper-option")?.classList.contains("is-unavailable");
-      input.disabled = Boolean(unavailable || (!input.checked && selectedCount >= 5));
+      input.disabled = Boolean(unavailable || (!input.checked && selectedCount >= 30));
     });
     elements.researchCompare.disabled = state.answering || state.retrieving || selectedCount < 2;
     elements.researchCompare.querySelector("span").textContent = selectedCount >= 2
@@ -398,6 +399,7 @@
   function renderResearchScope() {
     const currentValue = elements.researchPaperScope.value;
     const collections = window.TraceLibrary.collections();
+    if (!collections.some(c => c.id === state.researchCollectionId)) state.researchCollectionId = "";
     elements.researchPaperScope.innerHTML = [
       `<option value="">全部已入库论文（${state.papers.length}）</option>`,
       ...collections.map(c => `<option value="collection:${escapeHtml(c.id)}">收藏夹：${escapeHtml(c.name)}（${(c.paper_ids || []).length} 篇）</option>`),
@@ -408,13 +410,18 @@
     if (state.papers.some((paper) => paper.paper_id === currentValue) || collections.some(c => "collection:" + c.id === currentValue)) {
       elements.researchPaperScope.value = currentValue;
     }
-    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true, searchFirst: true, collections });
+    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true, searchFirst: true, collections, collectionId: state.researchCollectionId,
+      onCollectionChange: id => {state.researchCollectionId = id; state.comparisonPaperIds = [];},
+    });
+    const activeCollection = collections.find(c => c.id === state.researchCollectionId);
+    const comparisonPapers = state.papers.filter(p => !activeCollection || (p.collection_ids || []).includes(activeCollection.id) || (activeCollection.paper_ids || []).includes(p.paper_id));
+    state.comparisonPaperIds = state.comparisonPaperIds.filter(id => comparisonPapers.some(p => p.paper_id === id));
     const selectedIds = new Set(state.comparisonPaperIds);
     const selectedCount = selectedIds.size;
-    elements.comparisonPaperList.innerHTML = state.papers.map((paper) => {
+    elements.comparisonPaperList.innerHTML = comparisonPapers.map((paper) => {
       const checked = selectedIds.has(paper.paper_id);
       const unavailable = paper.parse_status !== "ready" || !paper.chunk_count;
-      const disabled = unavailable || (!checked && selectedCount >= 5);
+      const disabled = unavailable || (!checked && selectedCount >= 30);
       const version = paper.version_label ? ` · ${paper.version_label}` : "";
       const note = unavailable ? " · 暂无可检索文本" : "";
       return `
@@ -424,15 +431,15 @@
         </label>
       `;
     }).join("") || '<div class="comparison-paper-empty">论文库为空，请先导入论文。</div>';
-    elements.singlePaperScopeLabel.classList.toggle("is-hidden", state.comparisonMode);
+    elements.singlePaperScopeLabel.classList.remove("is-hidden");
     elements.comparisonPaperScope.classList.toggle("is-hidden", !state.comparisonMode);
     elements.researchSubmit.classList.toggle("is-hidden", state.comparisonMode);
     elements.researchAnswer.classList.toggle("is-hidden", state.comparisonMode);
     elements.researchCompare.classList.toggle("is-hidden", !state.comparisonMode);
     elements.comparisonModeToggle.innerHTML = state.comparisonMode
-      ? '返回证据检索 <span>→</span>'
+      ? '返回 <span>→</span>'
       : '切换到多篇比较 <span>→</span>';
-    const collectionScope = elements.researchPaperScope.value.startsWith("collection:");
+    const collectionScope = Boolean(state.researchCollectionId);
     byId("searchMentions").classList.toggle("is-hidden", state.comparisonMode);
     byId("searchMentions").textContent = collectionScope ? "收藏夹查找 · 哪些论文提到过" : "全库查找 · 哪些论文提到过";
     elements.comparisonModeToggle.disabled = state.answering || state.retrieving;
@@ -654,7 +661,7 @@
     if (state.retrieving || state.answering) return;
     const question = page === 1 ? validateText("researchQuestion", "researchError") : mentionQuestion;
     if (!question) return;
-    if (page === 1) { mentionQuestion = question; mentionQuestionCollection = elements.researchPaperScope.value.startsWith("collection:") ? elements.researchPaperScope.value.slice(11) : null; }
+    if (page === 1) { mentionQuestion = question; mentionQuestionCollection = state.researchCollectionId || (elements.researchPaperScope.value.startsWith("collection:") ? elements.researchPaperScope.value.slice(11) : null); }
     state.retrieving = true;
     byId("searchMentions").disabled = true;
     renderResearchScope();
@@ -783,8 +790,8 @@
       showToast("至少选择 2 篇论文后再比较。", "error");
       return;
     }
-    if (selectedIds.length > 5) {
-      showToast("一次最多比较 5 篇论文。", "error");
+    if (selectedIds.length > 30) {
+      showToast("一次最多比较 30 篇论文。", "error");
       return;
     }
 
@@ -802,7 +809,7 @@
       const response = await fetch("/api/research/compare", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ question, paper_ids: selectedIds, limit: 10 }),
+        body: JSON.stringify({ question, paper_ids: selectedIds, limit: Math.max(10, selectedIds.length * 2) }),
       });
       if (!response.ok) throw await responseError(response);
       const payload = await response.json();
@@ -1259,6 +1266,14 @@
     elements.comparisonPaperList.addEventListener("change", () => {
       refreshComparisonSelection();
     });
+    byId("selectComparisonAll").addEventListener("click", () => {
+      const inputs = Array.from(elements.comparisonPaperList.querySelectorAll("input[type=checkbox]"));
+      let count = 0;
+      inputs.forEach(input => {input.checked = !input.closest(".comparison-paper-option").classList.contains("is-unavailable") && count < 30; if(input.checked) count++;});
+      refreshComparisonSelection();
+      if (inputs.filter(input => !input.closest(".comparison-paper-option").classList.contains("is-unavailable")).length > 30) showToast("已选前 30 篇可检索论文，更多论文可分批比较。", "success");
+    });
+    byId("clearComparisonAll").addEventListener("click", () => {elements.comparisonPaperList.querySelectorAll("input[type=checkbox]").forEach(input => {input.checked=false;});refreshComparisonSelection();});
     elements.researchCompare.addEventListener("click", generateComparison);
     elements.fileInput.addEventListener("change", () => uploadFile(elements.fileInput.files?.[0]));
     byId("collectionFileInput").addEventListener("change", () => {

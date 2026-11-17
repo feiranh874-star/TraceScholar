@@ -265,15 +265,15 @@ def research_agent(request: RetrievalRequest, http_request: Request) -> AgentRes
     collection_id, _ = _collection_scope(request)
     intent = _classify_intent(request.question)
     if intent == "comparison" and len(request.paper_ids) > 1:
-        if len(request.paper_ids) > 5:
-            raise HTTPException(status_code=422, detail="一次最多比较 5 篇论文。")
+        if len(request.paper_ids) > 30:
+            raise HTTPException(status_code=422, detail="一次最多比较 30 篇论文。")
         if len(set(request.paper_ids)) != len(request.paper_ids):
             raise HTTPException(status_code=422, detail="比较论文不能重复选择。")
         return compare_papers(
             ComparisonRequest(
                 question=request.question,
                 paper_ids=request.paper_ids,
-                limit=max(2, request.limit),
+                limit=max(2, request.limit, len(request.paper_ids) * 2),
             ),
             http_request,
         )
@@ -394,9 +394,9 @@ def compare_papers(request: ComparisonRequest, http_request: Request) -> AgentRe
         raise HTTPException(status_code=404, detail="所选论文不存在，请刷新论文库后重试。")
 
     count = len(request.paper_ids)
-    if request.limit < count:
-        raise HTTPException(status_code=422, detail="证据条数至少要覆盖每一篇所选论文。")
-    base_limit, remainder = divmod(request.limit, count)
+    # A small legacy limit must not silently exclude any selected paper.
+    evidence_budget = max(request.limit, count)
+    base_limit, remainder = divmod(evidence_budget, count)
     per_paper: list[list[RetrievalEvidenceRecord]] = []
     total_candidates = 0
     for index, paper_id in enumerate(request.paper_ids):

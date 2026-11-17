@@ -9,7 +9,7 @@ const start = source.indexOf("  async function generateAnswer()");
 const end = source.indexOf("\n  function renderAll()", start);
 assert.ok(start >= 0 && end > start);
 
-function createHarness(failure) {
+function createHarness(failure, count = 2) {
   const cell = () => ({ textContent: "", innerHTML: "", disabled: false });
   const button = () => {
     const span = cell();
@@ -20,12 +20,13 @@ function createHarness(failure) {
     researchQuestion: { value: "比较 CLIP 和 GPT-3", focus() {} },
     researchSubmit: button(), researchAnswer: button(), researchCompare: button(),
     researchPaperScope: { value: "clip" },
-    comparisonPaperList: { querySelectorAll: () => [{ value: "clip" }, { value: "gpt3" }] },
+    comparisonPaperList: { querySelectorAll: () => Array.from({length:count},(_,i)=>({value:"paper-"+i})) },
     answerPanel: { classList: { remove() {} } },
     answerModel: cell(), answerResult: cell(), answerCitations: cell(),
     agentTrace: {}, agentSteps: cell(), evidenceCount: cell(), evidenceResults: cell(),
   };
   const toasts = [];
+  const requests = [];
   const context = {
     state, elements,
     clearAnswer() {},
@@ -37,13 +38,14 @@ function createHarness(failure) {
     friendlyError: (error) => error.message,
     escapeHtml: (value) => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
     responseError: async () => new Error("模型回答未完成 <retry>"),
-    fetch: async () => {
+    fetch: async (url, options) => {
+      requests.push({url,body:JSON.parse(options.body)});
       if (failure === "network") throw new TypeError("Network request failed");
       return { ok: false, status: 502 };
     },
   };
   const handlers = vm.runInNewContext(`${source.slice(start, end)}\n({ generateAnswer, generateComparison })`, context);
-  return { handlers, state, elements, toasts };
+  return { handlers, state, elements, toasts, requests };
 }
 
 for (const method of ["generateAnswer", "generateComparison"]) {
@@ -63,3 +65,9 @@ for (const method of ["generateAnswer", "generateComparison"]) {
     });
   }
 }
+
+test('six-paper comparison reaches the server with enough evidence for every paper',async()=>{
+  const h=createHarness('http',6);await h.handlers.generateComparison();
+  assert.equal(h.requests.length,1);assert.equal(h.requests[0].body.paper_ids.length,6);assert.equal(h.requests[0].body.limit,12);
+  assert.doesNotMatch(h.toasts.join(' '),/最多比较/);
+});

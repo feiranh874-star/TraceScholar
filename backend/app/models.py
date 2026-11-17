@@ -89,8 +89,8 @@ class ComparisonRequest(BaseModel):
     """A comparison must explicitly name at least two papers."""
 
     question: str = Field(min_length=2, max_length=500)
-    paper_ids: list[str] = Field(min_length=2, max_length=5)
-    limit: int = Field(default=10, ge=2, le=15)
+    paper_ids: list[str] = Field(min_length=2, max_length=30)
+    limit: int = Field(default=10, ge=2, le=60)
 
     @field_validator("paper_ids")
     @classmethod
