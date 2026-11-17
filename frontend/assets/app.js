@@ -311,7 +311,7 @@
     if (!state.papers.length) {
       elements.recentPapers.innerHTML = `
         <div class="inline-empty">
-          <strong>还没有导入论文</strong>
+          <strong>暂无论文</strong>
           <span>点击左侧“导入论文”，添加第一篇 PDF。</span>
         </div>
       `;
@@ -1352,12 +1352,18 @@
   }
 
   async function initialize() {
-    window.TraceBatch.init({ reload: () => loadPapers({ quiet: true }), collection: () => state.importCollection });
-    window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast, upload: chooseCollectionUpload });
-    bindEvents();
-    const initialView = new URLSearchParams(window.location.search).get("view");
-    navigateTo(Object.hasOwn(viewLabels, initialView) ? initialView : "overview");
-    await Promise.all([checkHealth(), loadPapers()]);
+    setLibraryLoading();
+    try {
+      window.TraceBatch.init({ reload: () => loadPapers({ quiet: true }), collection: () => state.importCollection });
+      window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast, upload: chooseCollectionUpload });
+      bindEvents();
+      const initialView = new URLSearchParams(window.location.search).get("view");
+      navigateTo(Object.hasOwn(viewLabels, initialView) ? initialView : "overview");
+      await Promise.all([checkHealth(), loadPapers()]);
+    } catch (_error) {
+      elements.recentPapers.innerHTML = '<div class="inline-empty is-error"><strong>论文资料加载失败</strong><span>请刷新页面后重试。</span></div>';
+      setApiState("is-offline", "页面初始化失败", "请刷新页面后重试");
+    }
   }
 
   if (document.readyState === "loading") {
