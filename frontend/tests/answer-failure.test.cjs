@@ -36,7 +36,7 @@ function createHarness(failure) {
     showToast: (message) => toasts.push(message),
     friendlyError: (error) => error.message,
     escapeHtml: (value) => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
-    responseError: async () => new Error("DeepSeek 回答未完成 <retry>"),
+    responseError: async () => new Error("模型回答未完成 <retry>"),
     fetch: async () => {
       if (failure === "network") throw new TypeError("Network request failed");
       return { ok: false, status: 502 };

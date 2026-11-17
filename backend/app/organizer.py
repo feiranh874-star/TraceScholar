@@ -104,3 +104,17 @@ def organize_paper(paper_id: uuid.UUID, body: Organization):
         metadata.update(notes=body.notes.strip(), collection_ids=ids)
         jobs.atomic(papers._metadata_path(paper_id), metadata)
         return papers._public_paper(metadata)
+
+
+@router.delete('/library/collections/{collection_id}/papers/{paper_id}')
+def remove_collection_member(collection_id: uuid.UUID, paper_id: uuid.UUID):
+    """Remove one membership, never the paper or its other memberships."""
+    with ocr._LOCK, jobs._LOCK, papers._STORE_LOCK:
+        _find(_collections(), collection_id)
+        metadata = papers._load_paper(paper_id)
+        if str(paper_id) in ocr._ACTIVE or jobs.busy(paper_id):
+            raise HTTPException(409, '论文任务正在运行，请完成后再整理。')
+        metadata['collection_ids'] = [i for i in metadata.get('collection_ids', [])
+                                      if i != str(collection_id)]
+        jobs.atomic(papers._metadata_path(paper_id), metadata)
+        return papers._public_paper(metadata)

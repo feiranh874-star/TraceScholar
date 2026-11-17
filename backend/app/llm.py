@@ -137,19 +137,19 @@ def complete_messages(messages: list[dict[str, str]], *, base_url: str, api_key:
             result = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
-            raise LLMServiceError("DeepSeek 拒绝了 API Key，请在 .env 中检查密钥。") from exc
+            raise LLMServiceError("模型服务拒绝了 API Key，请在 .env 中检查密钥。") from exc
         if exc.code == 429:
-            raise LLMServiceError("DeepSeek 调用过于频繁，请稍后重试。") from exc
+            raise LLMServiceError("模型服务调用过于频繁，请稍后重试。") from exc
         status = 504 if exc.code in {408, 504} else 502
-        raise LLMServiceError("DeepSeek 服务暂时无法完成回答，请稍后重试。", status_code=status) from exc
+        raise LLMServiceError("模型服务暂时无法完成回答，请稍后重试。", status_code=status) from exc
     except ssl.SSLError as exc:
-        raise LLMServiceError("DeepSeek 连接的证书校验失败，请检查本机网络或代理设置。") from exc
+        raise LLMServiceError("模型服务连接的证书校验失败，请检查本机网络或代理设置。") from exc
     except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
         if isinstance(getattr(exc, "reason", None), ssl.SSLError):
-            raise LLMServiceError("DeepSeek 连接的证书校验失败，请检查本机网络或代理设置。") from exc
-        raise LLMServiceError("连接 DeepSeek 超时，请稍后重试。", status_code=504) from exc
+            raise LLMServiceError("模型服务连接的证书校验失败，请检查本机网络或代理设置。") from exc
+        raise LLMServiceError("连接模型服务超时，请稍后重试。", status_code=504) from exc
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        raise LLMServiceError("DeepSeek 返回了无法解析的响应。") from exc
+        raise LLMServiceError("模型服务返回了无法解析的响应。") from exc
 
     try:
         choice = result["choices"][0]
@@ -157,10 +157,10 @@ def complete_messages(messages: list[dict[str, str]], *, base_url: str, api_key:
         raw_content = message.get("content")
         finish_reason = choice.get("finish_reason")
     except (KeyError, IndexError, TypeError, AttributeError) as exc:
-        raise LLMServiceError("DeepSeek 响应中缺少回答内容。") from exc
+        raise LLMServiceError("模型服务响应中缺少回答内容。") from exc
     content = raw_content.strip() if isinstance(raw_content, str) else ""
     if finish_reason == "length":
-        raise LLMServiceError("DeepSeek 本次输出达到上限，回答未完成。请重试；无需修改原问题。")
+        raise LLMServiceError("模型服务本次输出达到上限，回答未完成。请重试；无需修改原问题。")
     if not content:
-        raise LLMServiceError("DeepSeek 未返回回答内容。")
+        raise LLMServiceError("模型服务未返回回答内容。")
     return content

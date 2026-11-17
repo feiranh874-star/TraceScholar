@@ -165,8 +165,8 @@
     if (/page limit/i.test(value)) return "PDF 页数超过系统限制。";
     if (/too much extracted text/i.test(value)) return "PDF 提取出的文本量超过系统限制。";
     if (/Could not store/i.test(value)) return "文件保存失败，请联系管理员检查服务存储。";
-    if (/模型服务尚未配置|LLM_API_KEY/i.test(value)) return "DeepSeek 尚未配置，请在本地 .env 或 Render Environment 中设置模型信息。";
-    if (/DeepSeek/i.test(value)) return value;
+    if (/模型服务尚未配置|LLM_API_KEY/i.test(value)) return "模型服务尚未配置，请联系管理员设置接口信息。";
+    if (/模型服务|模型返回|模型响应|连接模型/i.test(value)) return value;
     if (status === 413) return "文件超过系统允许的处理范围。";
     if (status >= 500) return "服务处理失败，请稍后重试。";
     return value || "请求失败，请稍后重试。";
@@ -228,6 +228,7 @@
   function navigateTo(view) {
     if (!viewLabels[view]) return;
     state.activeView = view;
+    byId("searchBox").hidden = view !== "overview";
     all("[data-view-panel]").forEach((panel) => {
       panel.classList.toggle("is-active", panel.dataset.viewPanel === view);
     });
@@ -325,9 +326,11 @@
       const heading = elements.libraryEmpty.querySelector("h3");
       const description = elements.libraryEmpty.querySelector("p");
       const action = elements.libraryEmpty.querySelector("button");
+      action.hidden = false;
       if (hasAnyPapers && (hasSearch || window.TraceLibrary.hasFolder())) {
         heading.textContent = hasSearch ? "没有找到匹配的论文" : "收藏夹中还没有论文";
-        description.textContent = "试试题名、作者、文件名或备注中的其他关键词。";
+        description.textContent = hasSearch ? "试试题名、作者、文件名或备注中的其他关键词。" : "可点击上方“添加 / 移出论文”重新收纳。移出的论文仍保留在“全部论文”和其他收藏夹中。";
+        action.hidden = !hasSearch;
         action.textContent = "清除搜索";
         action.dataset.clearSearch = "true";
         delete action.dataset.goImport;
@@ -358,7 +361,7 @@
             <td class="table-nowrap">${paper.page_count} 页</td>
             <td><span class="status-badge ${status.className}">${status.label}</span></td>
             <td><span class="table-paper-date" title="${escapeHtml(formatDate(paper.created_at, true))}">${formatDate(paper.created_at)}</span></td>
-            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-organize-paper="${escapeHtml(paper.paper_id)}">整理</button><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button><button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button></div></td>
+            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-organize-paper="${escapeHtml(paper.paper_id)}">整理</button><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button>${window.TraceLibrary?.hasFolder() ? `<button class="open-paper-button" type="button" data-remove-collection-paper="${escapeHtml(paper.paper_id)}">移出收藏夹</button>` : `<button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="永久删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button>`}</div></td>
           </tr>
         `;
       })
@@ -391,7 +394,7 @@
     if (state.papers.some((paper) => paper.paper_id === currentValue)) {
       elements.researchPaperScope.value = currentValue;
     }
-    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true });
+    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true, searchFirst: true });
     const selectedIds = new Set(state.comparisonPaperIds);
     const selectedCount = selectedIds.size;
     elements.comparisonPaperList.innerHTML = state.papers.map((paper) => {
@@ -533,7 +536,7 @@
 
   function renderAnswer(payload) {
     elements.answerPanel.classList.remove("is-hidden");
-    elements.answerModel.textContent = payload.model ? `模型：${payload.model}` : "本地工具编排";
+    elements.answerModel.textContent = payload.model ? "基于原文生成" : "本地工具编排";
     const steps = Array.isArray(payload.steps) ? payload.steps : [];
     const toolLabels = {
       intent_router: "识别问题类型",
@@ -810,6 +813,7 @@
   }
 
   async function deletePaper(paperId) {
+    if (window.TraceLibrary?.hasFolder()) return window.TraceLibrary.removeFromCurrentFolder(paperId);
     if (state.deletingPaperId) return;
     const paper = state.papers.find(item => item.paper_id === paperId);
     if (!paper) return;
@@ -1138,7 +1142,6 @@
     });
 
     all(".nav-item[data-view]").forEach((button) => button.addEventListener("click", () => navigateTo(button.dataset.view)));
-    byId("topUploadButton").addEventListener("click", () => navigateTo("import"));
 
     elements.searchInput.addEventListener("input", () => {
       elements.librarySearch.value = elements.searchInput.value;
@@ -1216,8 +1219,10 @@
     document.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
-        elements.searchInput.focus();
-        elements.searchInput.select();
+        if (state.activeView !== "overview") navigateTo("library");
+        const search = state.activeView === "overview" ? elements.searchInput : elements.librarySearch;
+        search.focus();
+        search.select();
       }
       if (event.key === "Escape") closeMobileNavigation();
     });

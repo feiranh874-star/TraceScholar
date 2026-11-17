@@ -78,3 +78,27 @@ def test_deleted_paper_disappears_from_collection_without_deleting_collection(cl
     assert client.patch('/api/papers/' + p['paper_id'] + '/organization', json={'collection_ids': [c['id']]}).status_code == 200
     assert client.delete('/api/papers/' + p['paper_id']).status_code == 204
     assert client.get('/api/library/collections').json()['items'][0]['paper_ids'] == []
+
+
+def test_remove_one_membership_keeps_library_other_folder_notes_and_evidence(client):
+    p = upload(client, 'keep my notes')
+    pid = p['paper_id']
+    a, b = [client.post('/api/library/collections', json={'name': name}).json()
+            for name in ('folder 1', 'folder 2')]
+    client.patch(f'/api/papers/{pid}/organization', json={
+        'notes': 'keep my notes', 'collection_ids': [a['id'], b['id']]})
+    page = client.get(f'/api/papers/{pid}/pages/1').json()
+    pdf = client.get(f'/api/papers/{pid}/source.pdf').content
+    url = f"/api/library/collections/{a['id']}/papers/{pid}"
+    # A repeated click is safe and never changes the other folder.
+    for _ in range(2):
+        response = client.delete(url)
+        assert response.status_code == 200
+        assert response.json()['collection_ids'] == [b['id']]
+    assert client.get('/api/papers').json()['total'] == 1
+    assert client.get(f'/api/papers/{pid}').json()['notes'] == 'keep my notes'
+    assert client.get(f'/api/papers/{pid}/pages/1').json() == page
+    assert client.get(f'/api/papers/{pid}/source.pdf').content == pdf
+    folders = {c['id']: c['paper_ids'] for c in client.get('/api/library/collections').json()['items']}
+    assert folders == {a['id']: [], b['id']: [pid]}
+    assert client.delete(f'/api/library/collections/{uuid.uuid4()}/papers/{pid}').status_code == 404

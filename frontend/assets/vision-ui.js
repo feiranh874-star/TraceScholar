@@ -60,7 +60,7 @@
     const heading = node('div', undefined, 'vision-actions');
     heading.append(node('h3', '已保存的视觉识别 · 原始第 ' + data.page + ' 页'));
     const json = node('button', '下载识别 JSON', 'secondary-button'); json.type = 'button'; json.onclick = () => download(data); heading.append(json);
-    result.append(heading, node('p', data.notice, 'vision-hint'), node('p', '模型：' + data.model, 'vision-hint'));
+    result.append(heading, node('p', data.notice, 'vision-hint'));
     for (const warning of data.warnings || []) result.append(node('p', warning, 'vision-warning'));
     for (const [kind, items] of [['table', data.tables], ['formula', data.equations], ['figure', data.figures]]) {
       for (const item of items || []) {
@@ -96,7 +96,7 @@
     const actions = node('div', undefined, 'vision-actions'); const button = node('button', '视觉识别本页', 'secondary-button'); button.type = 'button';
     const status = node('p', '正在检查视觉接口配置…', 'vision-hint'); status.setAttribute('role', 'status');
     const output = node('div'); output.setAttribute('aria-live', 'polite');
-    root.append(node('h3', '复杂表格、公式与图片'), node('p', '将当前页原图发送给豆包，按实际用量计费。首次点击才调用；已保存结果直接读取。原始空白保留为空。', 'vision-hint'), actions, status, output);
+    root.append(node('h3', '复杂表格、公式与图片'), node('p', '使用已配置的视觉接口识别当前页原图，按接口实际用量计费。首次点击才调用；已保存结果直接读取。原始空白保留为空。', 'vision-hint'), actions, status, output);
     actions.append(button); target.append(root); button.disabled = true;
     const base = '/api/papers/' + encodeURIComponent(paperId) + '/vision/' + number;
     let timer = null, hasResult = false;

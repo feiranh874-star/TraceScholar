@@ -235,7 +235,7 @@ def runner(settings):
             for i, item in enumerate(data[key], 1):
                 item['bbox'] = [v / 1000 * (width if n % 2 == 0 else height) for n, v in enumerate(item['bbox'])]
                 item.update(id=f'vision-{prefix}-{i}', kind=prefix, source=source(metadata, number, item['bbox']),
-                            verified=False, method='豆包视觉识别（待人工核对）')
+                            verified=False, method='视觉识别（待人工核对）')
         data.update(paper_id=str(paper_id), page=number, width=width, height=height, sha256=metadata['sha256'],
                     model=settings.vision_model, prompt_version=PROMPT_VERSION, created_at=time.time(), usage=usage, job_id=job['id'],
                     notice='视觉模型转写结果，未自动认定正确。空白未补值；请核对原图，尤其是数字、合并单元格与公式。')

@@ -9,13 +9,13 @@ const start = source.indexOf('  async function deletePaper(');
 const end = source.indexOf('\n  function openPaper(', start);
 assert.ok(start >= 0 && end > start);
 
-function harness({ confirm = true, failure = false } = {}) {
+function harness({ confirm = true, failure = false, folder = false } = {}) {
   const state = { papers: [{ paper_id: 'v1', title: 'Attention', filename: 'old.pdf', version_label: 'v1' }, { paper_id: 'v7' }],
     total: 2, comparisonPaperIds: ['v1', 'v7'], currentPaper: { paper_id: 'v1' }, pendingUpload: {} };
   const cells = {};
   const byId = id => cells[id] ||= { textContent: '' };
   const elements = { researchPaperScope: { value: 'v1' }, evidenceResults: {}, evidenceCount: {} };
-  const calls = [], prompts = [], toasts = [];
+  const calls = [], prompts = [], toasts = [], removed = [];
   let closed = false, refreshed = false;
   const context = { state, elements, byId, window: { confirm: text => { prompts.push(text); return confirm; } },
     paperTitle: paper => paper.title, renderLibrary() {}, renderAll() {}, renderToolPapers() {}, resetUploadPanel() {}, clearAnswer() {},
@@ -23,9 +23,19 @@ function harness({ confirm = true, failure = false } = {}) {
     showToast: (message, type) => toasts.push({ message, type }), friendlyError: error => error.message,
     responseError: async () => new Error('该论文正在 OCR 识别'),
     fetch: async (...args) => { calls.push(args); return { ok: !failure, status: failure ? 409 : 204 }; } };
-  return { state, elements, calls, prompts, toasts, get closed() { return closed; }, get refreshed() { return refreshed; },
+  context.window.TraceLibrary = {hasFolder: () => folder, removeFromCurrentFolder: async id => removed.push(id)};
+  return { state, elements, calls, prompts, toasts, removed, get closed() { return closed; }, get refreshed() { return refreshed; },
     deletePaper: vm.runInNewContext(`${source.slice(start, end)}\ndeletePaper`, context) };
 }
+
+test('a folder action cannot fall through to permanent paper deletion', async () => {
+  const h = harness({folder: true});
+  await h.deletePaper('v1');
+  assert.deepEqual(h.removed, ['v1']);
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.prompts.length, 0);
+  assert.equal(h.state.papers.length, 2);
+});
 
 test('cancel deletion sends no request and keeps all selections', async () => {
   const h = harness({ confirm: false });

@@ -152,7 +152,7 @@ def _answer_with_evidence(
             )
     insufficient = answer.strip().rstrip("。") == "当前资料不足"
     if not insufficient and not citations:
-        raise HTTPException(status_code=502, detail="DeepSeek 回答未包含有效证据引用，请重试。")
+        raise HTTPException(status_code=502, detail="模型回答未包含有效证据引用，请重试。")
     return AnswerResponse(
         question=question,
         answer=answer,

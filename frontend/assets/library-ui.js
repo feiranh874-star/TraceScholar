@@ -13,6 +13,34 @@
   function mountPicker(select, papers, options = {}) {
     let picker = pickers.get(select);
     if (!picker) {
+      if (options.searchFirst) {
+        const root = document.createElement('div'); root.className = 'paper-picker paper-picker-search-first';
+        root.innerHTML = '<input type="search" aria-label="搜索检索范围论文" aria-expanded="false" placeholder="搜索题名、作者、文件名或备注" autocomplete="off"><div class="picker-selection"><span></span><button type="button" hidden>清除选择</button></div><div class="paper-picker-popover" hidden><small>按入库时间：从新到旧</small><div class="paper-picker-options" role="group" aria-label="选择论文"></div></div>';
+        select.hidden = true; select.after(root);
+        const search = root.querySelector('input'), list = root.querySelector('.paper-picker-options'), panel = root.querySelector('.paper-picker-popover'), clear = root.querySelector('.picker-selection button');
+        picker = {root, search, papers:[], options}; pickers.set(select, picker);
+        const toggle = open => { panel.hidden = !open; search.setAttribute('aria-expanded', String(open)); };
+        picker.draw = () => {
+          const selected = picker.papers.find(p => p.paper_id === select.value);
+          root.querySelector('.picker-selection span').textContent = selected ? '已选：' + title(selected) : '未限定论文，将检索整个论文库';
+          clear.hidden = !selected;
+          const rows = recent(picker.papers).filter(p => matches(p, search.value));
+          list.innerHTML = rows.map(p => '<button type="button" data-pick="' + esc(p.paper_id) + '" aria-pressed="' + (select.value === p.paper_id) + '"><strong>' + esc(title(p)) + '</strong><small>' + esc(p.filename) + ' · ' + esc(date(p)) + '</small>' + (p.notes ? '<span class="picker-note">备注：' + esc(p.notes) + '</span>' : '') + '</button>').join('') || '<p class="picker-empty">没有匹配论文，请换个关键词。</p>';
+        };
+        search.onfocus = () => { picker.draw(); toggle(true); };
+        search.oninput = () => { picker.draw(); toggle(true); };
+        list.onclick = event => {
+          const button = event.target.closest('[data-pick]'); if (!button) return;
+          select.value = button.dataset.pick; search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true}));
+          search.focus(); toggle(false);
+        };
+        clear.onclick = () => { select.value = ''; search.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); search.focus(); };
+        select.addEventListener('change', picker.draw);
+        root.addEventListener('keydown', event => { if (event.key === 'Escape') { toggle(false); search.focus(); } });
+        root.addEventListener('focusout', event => { if (!root.contains(event.relatedTarget)) toggle(false); });
+        document.addEventListener('click', event => { if (!root.contains(event.target)) toggle(false); });
+        picker.papers = papers; picker.draw(); return;
+      }
       const root = document.createElement('details'); root.className = 'paper-picker';
       root.innerHTML = '<summary><span></span><b aria-hidden="true">⌄</b></summary><div class="paper-picker-popover"><input type="search" aria-label="搜索待选论文" placeholder="搜索题名、作者、文件名或备注"><small>按入库时间：从新到旧</small><div class="paper-picker-options" role="group" aria-label="选择论文"></div></div>';
       select.hidden = true; select.after(root);
@@ -39,6 +67,20 @@
   window.TracePaperUI = {mountPicker, matches, recent};
 
   let collections = [], tab = 'all', folder = null, callbacks;
+  const removing = new Set();
+  async function removeFromCurrentFolder(paperId) {
+    const collectionId = folder;
+    if (!collectionId || removing.has(paperId)) return;
+    removing.add(paperId);
+    try {
+      const saved = await request('/api/library/collections/' + encodeURIComponent(collectionId) + '/papers/' + encodeURIComponent(paperId), undefined, 'DELETE');
+      const paper = callbacks.papers().find(p => p.paper_id === paperId);
+      if (paper) Object.assign(paper, saved);
+      await callbacks.reload();
+      callbacks.toast('已移出当前收藏夹，论文仍保留在论文库及其他收藏夹中。', 'success');
+    } catch (error) { callbacks.toast(error.message, 'error'); }
+    finally { removing.delete(paperId); callbacks.render(); }
+  }
   async function request(url, body, method = 'POST') {
     const response = await fetch(url, {method, headers:{'Content-Type':'application/json'}, ...(body !== undefined ? {body:JSON.stringify(body)} : {})});
     if (!response.ok) { const d = await response.json().catch(() => ({})); throw new Error(typeof d.detail === 'string' ? d.detail : '保存未完成，请检查输入或刷新后重试。'); }
@@ -106,6 +148,7 @@
     el('collectionsTab').onclick = () => { tab = 'folders'; folder = null; callbacks.render(); };
     document.addEventListener('click', async event => {
       const b = event.target.closest('button'); if (!b) return;
+      if (b.dataset.removeCollectionPaper) { b.disabled = true; await removeFromCurrentFolder(b.dataset.removeCollectionPaper); return; }
       if (b.hasAttribute('data-new-folder')) collectionDialog();
       if (b.hasAttribute('data-folder-back')) { folder = null; callbacks.render(); }
       if (b.dataset.folder) { folder = b.dataset.folder; el('librarySearch').value = ''; el('searchInput').value = ''; callbacks.render(); }
@@ -119,5 +162,5 @@
       }
     });
   }
-  window.TraceLibrary = {init, load, render, hasFolder:() => !!folder, filter: papers => folder ? papers.filter(p => (p.collection_ids || []).includes(folder)) : papers};
+  window.TraceLibrary = {init, load, render, removeFromCurrentFolder, hasFolder:() => !!folder, filter: papers => folder ? papers.filter(p => (p.collection_ids || []).includes(folder)) : papers};
 })();
