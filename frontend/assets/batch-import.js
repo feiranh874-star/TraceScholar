@@ -131,6 +131,7 @@
   async function start() {
     if (!queue.length || uploading || resolving || active(current)) return;
     const body = new FormData(); queue.forEach(file => body.append('files', file, file.name)); body.append('notes', el('batchNotes').value);
+    const collection = callbacks.collection?.(); if (collection) body.append('collection_id', collection.id);
     uploading = true; drawQueue(); el('batchUploadProgress').hidden = false; el('batchUploadProgress').value = 0; el('batchUploadStatus').textContent = '正在准备上传…';
     try {
       current = await upload(body); remember(current.id); queue = []; el('batchNotes').value = '';
@@ -174,5 +175,5 @@
     const id = remembered(); if (id && /^[a-f0-9-]{36}$/.test(id)) refreshJob(id, true);
     history(); drawQueue(); addEventListener('pagehide', () => clearTimeout(timer));
   }
-  window.TraceBatch = {init, addFiles};
+  window.TraceBatch = {init, addFiles, setMode};
 })();

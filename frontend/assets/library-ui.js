@@ -139,7 +139,7 @@
     const browse = tab === 'folders' && !folder;
     el('collectionArea').hidden = !browse; el('collectionContext').hidden = !folder || tab === 'all'; el('libraryPanel').hidden = browse;
     if (browse) el('collectionArea').innerHTML = '<div class="collection-heading"><div><h3>我的收藏夹</h3><p>按主题收纳；同一篇论文可以出现在多个收藏夹。</p></div><button class="primary-button" data-new-folder>＋ 新建收藏夹</button></div><div class="collection-grid">' + collections.map(c => '<article class="collection-card"><button class="collection-open" data-folder="' + esc(c.id) + '"><span class="folder-symbol" aria-hidden="true">▰</span><strong>' + esc(c.name) + '</strong><small>' + papers.filter(p => (p.collection_ids || []).includes(c.id)).length + ' 篇论文</small></button><div class="collection-actions"><button data-manage-folder="' + esc(c.id) + '">添加 / 移出论文</button><button data-rename-folder="' + esc(c.id) + '">重命名</button><button data-delete-folder="' + esc(c.id) + '">删除</button></div></article>').join('') + (!collections.length ? '<div class="collection-empty">还没有收藏夹。先新建一个，例如“精读论文”。</div>' : '') + '</div>';
-    if (folder) { const c = collections.find(c => c.id === folder); el('collectionContext').innerHTML = '<div><button class="text-button" data-folder-back>← 所有收藏夹</button><h3>' + esc(c?.name) + '</h3></div><button class="secondary-button" data-manage-folder="' + esc(folder) + '">添加 / 移出论文</button>'; }
+    if (folder) { const c = collections.find(c => c.id === folder); el('collectionContext').innerHTML = '<div><button class="text-button" data-folder-back>← 所有收藏夹</button><h3>' + esc(c?.name) + '</h3></div><div class="collection-context-actions"><button class="primary-button" data-upload-folder="' + esc(folder) + '">上传论文</button><button class="secondary-button" data-manage-folder="' + esc(folder) + '">添加 / 移出论文</button></div>'; }
     return browse;
   }
   function init(cbs) {
@@ -148,6 +148,7 @@
     el('collectionsTab').onclick = () => { tab = 'folders'; folder = null; callbacks.render(); };
     document.addEventListener('click', async event => {
       const b = event.target.closest('button'); if (!b) return;
+      if (b.dataset.uploadFolder) { const c = collections.find(c => c.id === b.dataset.uploadFolder); if (c) callbacks.upload(c); return; }
       if (b.dataset.removeCollectionPaper) { b.disabled = true; await removeFromCurrentFolder(b.dataset.removeCollectionPaper); return; }
       if (b.hasAttribute('data-new-folder')) collectionDialog();
       if (b.hasAttribute('data-folder-back')) { folder = null; callbacks.render(); }

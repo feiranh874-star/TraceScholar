@@ -212,7 +212,7 @@ def _batch_runner(record):
         jobs.save(record)
         try:
             with path.open('rb') as stream:
-                response=papers.upload_paper(UploadFile(file=stream,filename=entry),record['payload']['action'],'','',record['payload'].get('notes',''))
+                response=papers.upload_paper(UploadFile(file=stream,filename=entry),record['payload']['action'],'','',record['payload'].get('notes',''),record['payload'].get('collection_id',''))
             if hasattr(response,'body'):
                 result=json.loads(response.body);status=response.status_code
             else: result=response;status=201
@@ -230,9 +230,11 @@ def _batch_runner(record):
     return {'files':results,'notice':'关联版本等待逐篇确认；完全相同的文件复用已有记录。'}
 
 @router.post('/library/batch-upload',status_code=202)
-def batch_upload(files:list[UploadFile]=File(...),notes:str=Form(default='',max_length=4000)):
+def batch_upload(files:list[UploadFile]=File(...),notes:str=Form(default='',max_length=4000),collection_id:str=Form(default='',max_length=36)):
     if not 1<=len(files)<=20: raise HTTPException(422,'每批 1–20 个 PDF，总请求不超过服务限制。')
     notes=notes.strip() if isinstance(notes,str) else ''
+    with papers._STORE_LOCK:
+        collection_id=papers.validate_upload_collection(collection_id if isinstance(collection_id,str) else '')
     identifier=str(uuid.uuid4());names=[];paths=[];total_bytes=0
     try:
         for i,file in enumerate(files):
@@ -246,7 +248,7 @@ def batch_upload(files:list[UploadFile]=File(...),notes:str=Form(default='',max_
             names.append(papers._safe_filename(file.filename))
         # Preallocate id so the persisted task can locate staged files.
         original_id=identifier
-        record={'id':identifier,'kind':'batch','paper_ids':[],'payload':{'files':names,'action':'ask','notes':notes},'created_at':time.time(),'completed':[],'result':None,'status':'interrupted'}
+        record={'id':identifier,'kind':'batch','paper_ids':[],'payload':{'files':names,'action':'ask','notes':notes,'collection_id':collection_id},'created_at':time.time(),'completed':[],'result':None,'status':'interrupted'}
         jobs.save(record)
         return jobs.launch('batch',[],{},_batch_runner,identifier=original_id)
     except Exception:
@@ -292,7 +294,7 @@ def resolve_batch(identifier:uuid.UUID,index:int,body:BatchDecision):
         else:
             if not path.exists():raise HTTPException(404,'暂存文件已丢失，请重新上传。')
             with path.open('rb') as stream:
-                result=papers.upload_paper(UploadFile(file=stream,filename=entry['filename']),'keep_both','','',record['payload'].get('notes',''))
+                result=papers.upload_paper(UploadFile(file=stream,filename=entry['filename']),'keep_both','','',record['payload'].get('notes',''),record['payload'].get('collection_id',''))
             if hasattr(result,'body'):entry.update(status=result.status_code,result=json.loads(result.body))
             else:entry.update(status=201,result=result)
         path.unlink(missing_ok=True)

@@ -6,7 +6,7 @@
     tools: { eyebrow: "有来源的研究辅助", title: "研究工具" },
     overview: { eyebrow: "研究资料总览", title: "科研工作台" },
     library: { eyebrow: "可信科研知识库", title: "论文库" },
-    import: { eyebrow: "PDF 解析入库", title: "导入资料" },
+    import: { eyebrow: "PDF 解析入库", title: "导入论文" },
     research: { eyebrow: "本地可信检索", title: "证据检索" },
   };
 
@@ -15,6 +15,8 @@
     total: 0,
     activeView: "overview",
     uploading: false,
+    importCollection: null,
+    collectionPickerTarget: null,
     pendingUpload: null,
     retrieving: false,
     answering: false,
@@ -229,6 +231,7 @@
     if (!viewLabels[view]) return;
     state.activeView = view;
     byId("searchBox").hidden = view !== "overview";
+    document.querySelector(".topbar").classList.toggle("is-compact", view !== "overview");
     all("[data-view-panel]").forEach((panel) => {
       panel.classList.toggle("is-active", panel.dataset.viewPanel === view);
     });
@@ -243,6 +246,7 @@
     if (view === "library") renderLibrary();
     if (view === "tools") renderToolPapers();
     if (view === "research") renderResearchScope();
+    window.scrollTo({ top: 0, behavior: "instant" });
     document.querySelector(".content")?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -284,19 +288,17 @@
     elements.sidebarPaperCount.textContent = String(state.total);
   }
 
-  function paperListItem(paper) {
+  function paperTableCells(paper) {
     const status = statusInfo(paper.parse_status);
-    const version = paperVersion(paper);
     return `
-      <button class="paper-list-item" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
-        <span class="paper-type-icon" aria-hidden="true">PDF</span>
-        <span class="paper-list-copy">
-          <strong class="paper-list-title">${escapeHtml(paperTitle(paper))}</strong>
-          <span class="paper-list-meta">${escapeHtml(paperAuthor(paper))}${version ? ` · ${escapeHtml(version)}` : ""} · ${paper.page_count} 页 · ${formatDate(paper.created_at)}</span>
-        </span>
-        <span class="status-badge ${status.className}">${status.label}</span>
-        <span class="paper-list-arrow" aria-hidden="true">→</span>
-      </button>
+      <td><button class="table-paper" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
+        <span class="table-paper-icon" aria-hidden="true">PDF</span>
+        <span class="table-paper-copy"><strong class="table-paper-title" title="${escapeHtml(paperTitle(paper))}">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file">${escapeHtml(paper.filename)}${paperVersion(paper) ? ' · ' + escapeHtml(paperVersion(paper)) : ''}</small>${paper.notes ? `<small class="paper-note-preview">备注：${escapeHtml(paper.notes)}</small>` : ''}</span>
+      </button></td>
+      <td><span class="table-paper-authors" title="${escapeHtml(paperAuthor(paper))}">${escapeHtml(paperAuthor(paper))}</span></td>
+      <td class="table-nowrap">${paper.page_count} 页</td>
+      <td><span class="status-badge ${status.className}">${status.label}</span></td>
+      <td><span class="table-paper-date">${formatDate(paper.created_at)}</span></td>
     `;
   }
 
@@ -310,13 +312,12 @@
       `;
       return;
     }
-    elements.recentPapers.innerHTML = state.papers.slice(0, 4).map(paperListItem).join("");
+    elements.recentPapers.innerHTML = `<table class="recent-paper-table"><thead><tr><th>论文</th><th>作者</th><th>页数</th><th>状态</th><th>导入时间</th></tr></thead><tbody>${window.TracePaperUI.recent(state.papers).slice(0, 4).map(paper => `<tr>${paperTableCells(paper)}</tr>`).join("")}</tbody></table>`;
   }
 
   function renderLibrary() {
     if (window.TraceLibrary.render(state.papers)) return;
     const papers = filteredPapers();
-    const hasAnyPapers = state.papers.length > 0;
     const hasSearch = Boolean(searchQuery());
     elements.libraryEmpty.classList.toggle("is-hidden", papers.length > 0);
     elements.libraryTable.closest(".table-wrap").classList.toggle("is-hidden", papers.length === 0);
@@ -327,9 +328,9 @@
       const description = elements.libraryEmpty.querySelector("p");
       const action = elements.libraryEmpty.querySelector("button");
       action.hidden = false;
-      if (hasAnyPapers && (hasSearch || window.TraceLibrary.hasFolder())) {
+      if (hasSearch || window.TraceLibrary.hasFolder()) {
         heading.textContent = hasSearch ? "没有找到匹配的论文" : "收藏夹中还没有论文";
-        description.textContent = hasSearch ? "试试题名、作者、文件名或备注中的其他关键词。" : "可点击上方“添加 / 移出论文”重新收纳。移出的论文仍保留在“全部论文”和其他收藏夹中。";
+        description.textContent = hasSearch ? "试试题名、作者、文件名或备注中的其他关键词。" : "点击“上传论文”从本机添加，或用“添加 / 移出论文”收纳库内论文。";
         action.hidden = !hasSearch;
         action.textContent = "清除搜索";
         action.dataset.clearSearch = "true";
@@ -348,20 +349,10 @@
 
     elements.libraryTable.innerHTML = papers
       .map((paper) => {
-        const status = statusInfo(paper.parse_status);
         return `
           <tr>
-            <td>
-              <button class="table-paper" type="button" data-paper-id="${escapeHtml(paper.paper_id)}">
-                <span class="table-paper-icon" aria-hidden="true">PDF</span>
-                <span class="table-paper-copy"><strong class="table-paper-title" title="${escapeHtml(paperTitle(paper))}">${escapeHtml(paperTitle(paper))}</strong><small class="table-paper-file" title="${escapeHtml(paper.filename)}">${escapeHtml(paper.filename)}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</small>${paper.notes ? `<small class="paper-note-preview">备注：${escapeHtml(paper.notes)}</small>` : ""}</span>
-              </button>
-            </td>
-            <td><span class="table-paper-authors" title="${escapeHtml(paperAuthor(paper))}">${escapeHtml(paperAuthor(paper))}</span></td>
-            <td class="table-nowrap">${paper.page_count} 页</td>
-            <td><span class="status-badge ${status.className}">${status.label}</span></td>
-            <td><span class="table-paper-date" title="${escapeHtml(formatDate(paper.created_at, true))}">${formatDate(paper.created_at)}</span></td>
-            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-organize-paper="${escapeHtml(paper.paper_id)}">整理</button><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button>${window.TraceLibrary?.hasFolder() ? `<button class="open-paper-button" type="button" data-remove-collection-paper="${escapeHtml(paper.paper_id)}">移出收藏夹</button>` : `<button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="永久删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button>`}</div></td>
+            ${paperTableCells(paper)}
+            <td><div class="library-row-actions"><button class="open-paper-button" type="button" data-organize-paper="${escapeHtml(paper.paper_id)}">整理</button><button class="open-paper-button" type="button" data-paper-id="${escapeHtml(paper.paper_id)}" aria-label="查看 ${escapeHtml(paperTitle(paper))}">查看</button>${window.TraceLibrary?.hasFolder() ? `<button class="open-paper-button" type="button" data-remove-collection-paper="${escapeHtml(paper.paper_id)}" aria-label="移出当前收藏夹">移出</button>` : `<button class="delete-paper-button" type="button" data-delete-paper="${escapeHtml(paper.paper_id)}" aria-label="永久删除 ${escapeHtml(paperTitle(paper))}"${state.deletingPaperId ? " disabled" : ""}>${state.deletingPaperId === paper.paper_id ? "删除中…" : "删除"}</button>`}</div></td>
           </tr>
         `;
       })
@@ -917,6 +908,20 @@
     if (choose) elements.fileInput.click();
   }
 
+  function setImportCollection(collection) {
+    state.importCollection = collection ? {id: collection.id, name: collection.name} : null;
+    const notice = byId("importCollectionNotice");
+    notice.hidden = !collection;
+    notice.innerHTML = collection ? `<div><strong>上传到：${escapeHtml(collection.name)}</strong><span>同时保存到“全部论文”，按入库时间从新到旧显示。</span></div><button type="button" class="text-button" data-clear-import-collection>改为仅入库</button>` : "";
+  }
+
+  function chooseCollectionUpload(collection) {
+    if (state.uploading) { showToast("请等待当前上传完成。", "error"); return; }
+    state.collectionPickerTarget = {id: collection.id, name: collection.name};
+    byId("collectionFileInput").value = "";
+    byId("collectionFileInput").click();
+  }
+
   async function uploadFile(file, decision = {}) {
     const validationError = validateUpload(file);
     if (validationError) {
@@ -932,11 +937,13 @@
     navigateTo("import");
     showUploadProgress(file);
     const savedNotes = state.pendingUpload?.notes;
+    const collection = state.pendingUpload ? state.pendingUpload.collection : state.importCollection;
     state.pendingUpload = null;
     const formData = new FormData();
     formData.append("file", file, file.name);
     const notes = savedNotes ?? byId("importNotes").value;
     formData.append("notes", notes);
+    if (collection) formData.append("collection_id", collection.id);
     formData.append("conflict_action", decision.action || "ask");
     if (decision.target) {
       formData.append("target_paper_id", decision.target.paper_id);
@@ -948,7 +955,7 @@
       if (response.status === 409 && !decision.action) {
         const conflict = await response.json();
         if (conflict.conflict) {
-          state.pendingUpload = { file, conflict, notes };
+          state.pendingUpload = { file, conflict, notes, collection };
           elements.uploadProgress.classList.add("is-hidden");
           elements.uploadResult.classList.remove("is-hidden");
           const newer = conflict.recommendation === "keep_existing_newer";
@@ -973,7 +980,7 @@
       if (!paper.duplicate) byId("importNotes").value = "";
       showUploadResult(paper, true);
       await loadPapers({ quiet: true });
-      showToast(paper.duplicate ? "论文已存在，已为你打开原有记录。" : "论文导入成功。", "success");
+      showToast(collection ? "已收纳到“" + collection.name + "”，论文也保留在全部论文中。" : paper.duplicate ? "论文已存在，已为你打开原有记录。" : "论文导入成功。", "success");
     } catch (error) {
       const message = friendlyError(error, "文件导入失败，请重试。");
       showUploadResult(null, false, message);
@@ -1177,6 +1184,15 @@
     });
     elements.researchCompare.addEventListener("click", generateComparison);
     elements.fileInput.addEventListener("change", () => uploadFile(elements.fileInput.files?.[0]));
+    byId("collectionFileInput").addEventListener("change", () => {
+      const files = Array.from(byId("collectionFileInput").files || []);
+      if (!files.length) return;
+      setImportCollection(state.collectionPickerTarget);
+      resetUploadPanel();
+      navigateTo("import");
+      if (files.length > 1) window.TraceBatch.addFiles(files);
+      else { window.TraceBatch.setMode(false); uploadFile(files[0]); }
+    });
     bindDropzone(elements.miniDropzone);
     bindDropzone(elements.largeDropzone);
 
@@ -1195,7 +1211,11 @@
           uploadFile(file, { action, target });
         }
       }
-      if (event.target.closest("[data-go-import]")) navigateTo("import");
+      if (event.target.closest("[data-go-import]")) {
+        if (!state.uploading && !state.pendingUpload) setImportCollection(null);
+        navigateTo("import");
+      }
+      if (event.target.closest("[data-clear-import-collection]") && !state.uploading && !state.pendingUpload) setImportCollection(null);
       if (event.target.closest("[data-go-library]")) navigateTo("library");
 
       const paperButton = event.target.closest("[data-paper-id]");
@@ -1233,8 +1253,8 @@
   }
 
   async function initialize() {
-    window.TraceBatch.init({ reload: () => loadPapers({ quiet: true }) });
-    window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast });
+    window.TraceBatch.init({ reload: () => loadPapers({ quiet: true }), collection: () => state.importCollection });
+    window.TraceLibrary.init({ render: renderLibrary, reload: () => loadPapers({ quiet: true }), papers: () => state.papers, toast: showToast, upload: chooseCollectionUpload });
     bindEvents();
     const initialView = new URLSearchParams(window.location.search).get("view");
     navigateTo(Object.hasOwn(viewLabels, initialView) ? initialView : "overview");

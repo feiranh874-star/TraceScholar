@@ -228,6 +228,19 @@ def _extract_pdf(source: Path, filename: str) -> tuple[dict[str, Any], list[dict
         document.close()
 
 
+def validate_upload_collection(value: str) -> str:
+    """Validate under the store lock before attaching an upload to a collection."""
+    if not value:
+        return ''
+    try:
+        identifier = str(uuid.UUID(value))
+    except (ValueError, TypeError):
+        raise HTTPException(422, '收藏夹标识无效。')
+    from app import organizer
+    organizer._find(organizer._collections(), identifier)
+    return identifier
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -239,11 +252,13 @@ def upload_paper(
     target_paper_id: str = Form(default=""),
     target_sha256: str = Form(default=""),
     notes: str = Form(default="", max_length=4000),
+    collection_id: str = Form(default="", max_length=36),
 ) -> dict[str, Any]:
     """Upload a PDF and persist extracted page text with 1-based page numbers."""
 
     # Internal batch/discovery callers omit the HTTP-only Form default.
     notes = notes.strip() if isinstance(notes, str) else ""
+    collection_id = collection_id if isinstance(collection_id, str) else ""
     if len(notes) > 4000:
         raise HTTPException(422, "备注不能超过 4000 字。")
     if conflict_action not in {"ask", "keep_both", "replace"}:
@@ -273,8 +288,14 @@ def upload_paper(
         filename = _safe_filename(file.filename)
         from app import ocr,jobs
         with ocr._LOCK,jobs._LOCK,_STORE_LOCK:
+            collection_id = validate_upload_collection(collection_id)
             duplicate = _find_duplicate(sha256)
             if duplicate:
+                if collection_id and collection_id not in duplicate.get('collection_ids', []):
+                    if duplicate['paper_id'] in ocr._ACTIVE or jobs.busy(duplicate['paper_id']):
+                        raise HTTPException(409, '论文任务正在运行，请完成后再收纳。')
+                    duplicate['collection_ids'] = [*duplicate.get('collection_ids', []), collection_id]
+                    jobs.atomic(_metadata_path(duplicate['paper_id']), duplicate)
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content=_public_paper(duplicate, duplicate=True),
@@ -350,6 +371,7 @@ def upload_paper(
                 sha256=sha256,
                 **extracted,
                 notes=notes,
+                collection_ids=[collection_id] if collection_id else [],
                 parse_status=parse_status,
                 needs_ocr_pages=needs_ocr_pages,
                 section_count=len(sections),

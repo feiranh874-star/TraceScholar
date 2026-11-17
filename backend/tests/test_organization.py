@@ -14,13 +14,13 @@ def client(tmp_path, monkeypatch):
     return TestClient(create_app(Settings()))
 
 
-def upload(client, notes=''):
+def upload(client, notes='', collection_id=''):
     document = pymupdf.open()
     page = document.new_page()
     page.insert_text((50, 50), 'A scientific study of neural attention. Original verified source text.')
     content = document.tobytes()
     document.close()
-    response = client.post('/api/papers', files={'file': ('paper.pdf', content, 'application/pdf')}, data={'notes': notes})
+    response = client.post('/api/papers', files={'file': ('paper.pdf', content, 'application/pdf')}, data={'notes': notes, 'collection_id': collection_id})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -102,3 +102,26 @@ def test_remove_one_membership_keeps_library_other_folder_notes_and_evidence(cli
     folders = {c['id']: c['paper_ids'] for c in client.get('/api/library/collections').json()['items']}
     assert folders == {a['id']: [], b['id']: [pid]}
     assert client.delete(f'/api/library/collections/{uuid.uuid4()}/papers/{pid}').status_code == 404
+
+
+def test_upload_into_folder_is_in_library_and_duplicate_adds_only_membership(client):
+    first = upload(client, 'original note')
+    a, b = [client.post('/api/library/collections', json={'name': name}).json()
+            for name in ('folder 1', 'folder 2')]
+    second = upload(client, 'new note', a['id'])
+    assert second['collection_ids'] == [a['id']]
+    assert [p['paper_id'] for p in client.get('/api/papers').json()['items']] == [second['paper_id'], first['paper_id']]
+    source = client.get(f"/api/papers/{second['paper_id']}/source.pdf").content
+    files = {'file': ('same.pdf', source, 'application/pdf')}
+    for _ in range(2):
+        response = client.post('/api/papers', files=files, data={'collection_id': b['id'], 'notes': 'do not overwrite'})
+        assert response.status_code == 200
+        result = response.json()
+        assert result['duplicate']
+        assert result['collection_ids'] == [a['id'], b['id']]
+        assert result['notes'] == 'new note'
+        assert result['created_at'] == second['created_at']
+    assert client.get('/api/papers').json()['total'] == 2
+    assert client.post('/api/papers', files=files, data={'collection_id': str(uuid.uuid4())}).status_code == 404
+    assert client.post('/api/papers', files=files, data={'collection_id': '../bad'}).status_code == 422
+    assert client.get(f"/api/papers/{second['paper_id']}").json()['collection_ids'] == [a['id'], b['id']]
