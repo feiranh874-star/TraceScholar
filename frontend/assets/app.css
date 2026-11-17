@@ -879,8 +879,7 @@ select:focus-visible,
   gap: 20px;
 }
 
-.recent-panel,
-.quick-import {
+.recent-panel {
   min-height: 345px;
   padding: 25px;
 }
@@ -2550,7 +2549,6 @@ body.drawer-open .paper-drawer {
   }
 
   .recent-panel,
-  .quick-import,
   .import-guide {
     min-height: auto;
   }
@@ -2740,7 +2738,6 @@ body.drawer-open .paper-drawer {
   }
 
   .recent-panel,
-  .quick-import,
   .full-drop-panel {
     padding: 19px;
   }
@@ -3027,13 +3024,6 @@ button.tool-result-card { cursor: pointer; }
 .recent-paper-table th:nth-child(4) { width:14%; }
 .recent-paper-table th:last-child { width:17%; }
 .overview-grid { grid-template-columns:minmax(0,1fr); }
-.quick-import { display:grid; grid-template-columns:180px minmax(0,1fr) minmax(180px,.8fr); align-items:center; gap:24px; min-height:0; }
-.quick-import .panel-header { margin:0; }
-.quick-import .mini-dropzone { min-height:185px; }
-@media(max-width:960px) {
-  .quick-import { display:block; }
-  .quick-import .panel-header { margin-bottom:20px; }
-}
 .field-caption { display:block; font-weight:600; font-size:14px; margin-bottom:10px; color:#536078; }
 .paper-picker { position:relative; width:100%; margin:8px 0 0; font-size:14px; }
 .paper-picker>summary { list-style:none; display:flex; justify-content:space-between; align-items:center; gap:16px; background:white; border:1px solid #d8ddee; padding:15px 17px; border-radius:12px; cursor:pointer; color:#2c3750; line-height:1.6; }

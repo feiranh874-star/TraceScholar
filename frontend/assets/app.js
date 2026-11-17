@@ -46,7 +46,6 @@
     libraryEmpty: byId("libraryEmpty"),
     refreshPapers: byId("refreshPapers"),
     fileInput: byId("fileInput"),
-    miniDropzone: byId("miniDropzone"),
     largeDropzone: byId("largeDropzone"),
     uploadProgress: byId("uploadProgress"),
     uploadFilename: byId("uploadFilename"),
@@ -307,7 +306,7 @@
       elements.recentPapers.innerHTML = `
         <div class="inline-empty">
           <strong>还没有导入论文</strong>
-          <span>从右侧快速导入一篇 PDF 开始。</span>
+          <span>点击左侧“导入论文”，添加第一篇 PDF。</span>
         </div>
       `;
       return;
@@ -1193,7 +1192,6 @@
       if (files.length > 1) window.TraceBatch.addFiles(files);
       else { window.TraceBatch.setMode(false); uploadFile(files[0]); }
     });
-    bindDropzone(elements.miniDropzone);
     bindDropzone(elements.largeDropzone);
 
     document.addEventListener("click", (event) => {
