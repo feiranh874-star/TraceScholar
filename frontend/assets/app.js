@@ -326,9 +326,12 @@
       const heading = elements.libraryEmpty.querySelector("h3");
       const description = elements.libraryEmpty.querySelector("p");
       const action = elements.libraryEmpty.querySelector("button");
-      action.hidden = false;
+      description.hidden = true;
+      action.hidden = true;
+      delete action.dataset.goImport;
       if (hasSearch || window.TraceLibrary.hasFolder()) {
         heading.textContent = hasSearch ? "没有找到匹配的论文" : "收藏夹中还没有论文";
+        description.hidden = false;
         description.textContent = hasSearch ? "试试题名、作者、文件名或备注中的其他关键词。" : "点击“上传论文”从本机添加，或用“添加 / 移出论文”收纳库内论文。";
         action.hidden = !hasSearch;
         action.textContent = "清除搜索";
@@ -337,9 +340,8 @@
         delete action.dataset.retryLoad;
       } else {
         heading.textContent = "论文库还是空的";
-        description.textContent = "导入第一篇 PDF，开始建立可信科研知识库。";
-        action.textContent = "导入第一篇论文";
-        action.dataset.goImport = "true";
+        description.textContent = "";
+        action.textContent = "";
         delete action.dataset.clearSearch;
         delete action.dataset.retryLoad;
       }
@@ -789,7 +791,9 @@
       elements.libraryEmpty.classList.remove("is-hidden");
       elements.libraryEmpty.querySelector("h3").textContent = "无法读取论文库";
       elements.libraryEmpty.querySelector("p").textContent = "请检查网络和服务状态，然后重新加载。";
+      elements.libraryEmpty.querySelector("p").hidden = false;
       const retryButton = elements.libraryEmpty.querySelector("button");
+      retryButton.hidden = false;
       retryButton.textContent = "重新加载";
       retryButton.dataset.retryLoad = "true";
       delete retryButton.dataset.goImport;
