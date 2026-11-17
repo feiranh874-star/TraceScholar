@@ -6,7 +6,7 @@
     <meta name="description" content="TraceScholar 可信科研助手 Agent" />
     <title>TraceScholar · 可信科研助手</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/assets/app.css?v=19" />
+    <link rel="stylesheet" href="/assets/app.css?v=20" />
   </head>
   <body>
     <div class="app-shell">
@@ -71,7 +71,7 @@
             <div class="section-toolbar"><div><span class="section-kicker">科研资料库</span><h2>我的论文</h2></div></div>
             <div class="library-tabs" role="tablist" aria-label="论文资料视图"><button id="allPapersTab" role="tab" aria-selected="true" class="is-active">全部论文</button><button id="collectionsTab" role="tab" aria-selected="false">收藏夹</button></div>
             <div id="collectionArea" hidden></div><div id="collectionContext" hidden></div>
-            <section class="panel library-panel" id="libraryPanel"><div class="library-controls"><label class="inline-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="librarySearch" type="search" placeholder="搜索题名、作者、文件名或备注"/></label><button class="icon-button" id="refreshPapers" title="刷新论文库"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 11M5.5 15A7 7 0 0 0 18 17.5l2-4.5"/></svg></button></div><div class="table-wrap"><table><thead><tr><th>论文</th><th>作者</th><th>页数</th><th>状态</th><th>导入时间</th><th></th></tr></thead><tbody id="libraryTable"></tbody></table></div><div class="empty-state is-hidden" id="libraryEmpty"><div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v16H6.5A2.5 2.5 0 0 1 4 17.5v-12Z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H19"/></svg></div><h3>论文库还是空的</h3><p hidden></p><button class="primary-button" type="button" hidden></button></div></section>
+            <section class="panel library-panel" id="libraryPanel"><div class="library-controls"><label class="inline-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="librarySearch" type="search" placeholder="搜索题名、作者、文件名或备注"/></label><button class="icon-button" id="refreshPapers" title="刷新论文库"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 11M5.5 15A7 7 0 0 0 18 17.5l2-4.5"/></svg></button></div><div class="table-wrap"><table><thead><tr><th>论文</th><th>作者</th><th>页数</th><th>状态</th><th>导入时间</th><th></th></tr></thead><tbody id="libraryTable"></tbody></table></div><div class="empty-state is-hidden" id="libraryEmpty"><div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v16H6.5A2.5 2.5 0 0 1 4 17.5v-12Z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H19"/></svg></div><h3>论文库还是空的</h3><p hidden></p><button class="primary-button" type="button" hidden></button></div><nav class="library-pagination" id="libraryPagination" aria-label="论文列表分页" hidden></nav></section>
           </section>
 
           <section class="view" id="view-research" data-view-panel="research">
@@ -136,8 +136,8 @@
     <input type="file" id="collectionFileInput" accept="application/pdf,.pdf" multiple hidden />
     <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden />
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/assets/library-ui.js?v=3" defer></script>
+    <script src="/assets/library-ui.js?v=4" defer></script>
     <script src="/assets/batch-import.js?v=2" defer></script>
-    <script src="/assets/app.js?v=20" defer></script>
+    <script src="/assets/app.js?v=21" defer></script>
   </body>
 </html>

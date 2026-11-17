@@ -8,6 +8,14 @@
     return !term || [p.title, p.filename, p.author, ...(p.authors || []), p.notes].some(v => String(v || '').toLocaleLowerCase().includes(term));
   }
   const recent = papers => [...papers].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  function paginate(papers, requestedPage, pageSize = 10) {
+    const total = papers.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.max(1, Math.min(totalPages, Number(requestedPage) || 1));
+    const offset = (page - 1) * pageSize;
+    return {items: papers.slice(offset, offset + pageSize), page, total, totalPages,
+      start: total ? offset + 1 : 0, end: Math.min(offset + pageSize, total)};
+  }
   const date = p => p.created_at ? new Date(p.created_at).toLocaleString('zh-CN', {hour12:false}) : '入库时间未知';
   const pickers = new WeakMap();
   function mountPicker(select, papers, options = {}) {
@@ -64,7 +72,7 @@
     }
     picker.papers = papers; picker.options = options; picker.draw();
   }
-  window.TracePaperUI = {mountPicker, matches, recent};
+  window.TracePaperUI = {mountPicker, matches, recent, paginate};
 
   let collections = [], tab = 'all', folder = null, callbacks;
   const removing = new Set();
@@ -163,5 +171,5 @@
       }
     });
   }
-  window.TraceLibrary = {init, load, render, removeFromCurrentFolder, hasFolder:() => !!folder, filter: papers => folder ? papers.filter(p => (p.collection_ids || []).includes(folder)) : papers};
+  window.TraceLibrary = {init, load, render, removeFromCurrentFolder, scopeKey:() => tab + ':' + (folder || ''), hasFolder:() => !!folder, filter: papers => folder ? papers.filter(p => (p.collection_ids || []).includes(folder)) : papers};
 })();

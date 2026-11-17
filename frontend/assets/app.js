@@ -23,6 +23,8 @@
     comparisonMode: false,
     comparisonPaperIds: [],
     deletingPaperId: null,
+    libraryPage: 1,
+    libraryContext: "",
   };
 
   const byId = (id) => document.getElementById(id);
@@ -44,6 +46,7 @@
     recentPapers: byId("recentPapers"),
     libraryTable: byId("libraryTable"),
     libraryEmpty: byId("libraryEmpty"),
+    libraryPagination: byId("libraryPagination"),
     refreshPapers: byId("refreshPapers"),
     fileInput: byId("fileInput"),
     largeDropzone: byId("largeDropzone"),
@@ -314,9 +317,24 @@
     elements.recentPapers.innerHTML = `<table class="recent-paper-table"><thead><tr><th>论文</th><th>作者</th><th>页数</th><th>状态</th><th>导入时间</th></tr></thead><tbody>${window.TracePaperUI.recent(state.papers).slice(0, 4).map(paper => `<tr>${paperTableCells(paper)}</tr>`).join("")}</tbody></table>`;
   }
 
+  function renderLibraryPagination(page) {
+    const {total, totalPages, start, end} = page;
+    elements.libraryPagination.hidden = !total;
+    if (!total) { elements.libraryPagination.innerHTML = ""; return; }
+    const pages = totalPages <= 7 ? Array.from({length: totalPages}, (_, i) => i + 1)
+      : [...new Set([1, page.page - 1, page.page, page.page + 1, totalPages])].filter(n => n > 0 && n <= totalPages).sort((a, b) => a - b);
+    const numbers = pages.map((n, i) => `${i && n - pages[i - 1] > 1 ? '<span class="page-gap" aria-hidden="true">…</span>' : ''}<button type="button" data-library-page="${n}" aria-label="第 ${n} 页"${n === page.page ? ' aria-current="page"' : ''}>${n}</button>`).join("");
+    elements.libraryPagination.innerHTML = `<span class="library-page-summary" role="status">共 ${total} 篇 · 每页 10 篇 · 第 ${start}–${end} 篇</span><div class="library-page-buttons"><button type="button" data-library-page="${page.page - 1}"${page.page === 1 ? ' disabled' : ''}>上一页</button>${numbers}<button type="button" data-library-page="${page.page + 1}"${page.page === totalPages ? ' disabled' : ''}>下一页</button></div>`;
+  }
+
   function renderLibrary() {
-    if (window.TraceLibrary.render(state.papers)) return;
+    const context = window.TraceLibrary.scopeKey() + "\n" + searchQuery();
+    if (state.libraryContext !== context) { state.libraryPage = 1; state.libraryContext = context; }
+    if (window.TraceLibrary.render(state.papers)) { elements.libraryPagination.hidden = true; return; }
     const papers = filteredPapers();
+    const page = window.TracePaperUI.paginate(papers, state.libraryPage);
+    state.libraryPage = page.page;
+    renderLibraryPagination(page);
     const hasSearch = Boolean(searchQuery());
     elements.libraryEmpty.classList.toggle("is-hidden", papers.length > 0);
     elements.libraryTable.closest(".table-wrap").classList.toggle("is-hidden", papers.length === 0);
@@ -348,7 +366,7 @@
       return;
     }
 
-    elements.libraryTable.innerHTML = papers
+    elements.libraryTable.innerHTML = page.items
       .map((paper) => {
         return `
           <tr>
@@ -762,6 +780,7 @@
   }
 
   function setLibraryLoading() {
+    elements.libraryPagination.hidden = true;
     elements.libraryEmpty.classList.add("is-hidden");
     elements.libraryTable.closest(".table-wrap").classList.remove("is-hidden");
     elements.libraryTable.innerHTML = '<tr class="loading-row"><td colspan="6"><span></span>正在读取论文库…</td></tr>';
@@ -1199,6 +1218,14 @@
     bindDropzone(elements.largeDropzone);
 
     document.addEventListener("click", (event) => {
+      const pageButton = event.target.closest("[data-library-page]");
+      if (pageButton && !pageButton.disabled) {
+        state.libraryPage = Number(pageButton.dataset.libraryPage);
+        renderLibrary();
+        byId("libraryPanel").scrollIntoView({block: "start", behavior: "smooth"});
+        elements.libraryPagination.querySelector('[aria-current="page"]')?.focus({preventScroll: true});
+        return;
+      }
       const deleteButton = event.target.closest("[data-delete-paper]");
       if (deleteButton) { deletePaper(deleteButton.dataset.deletePaper); return; }
       const importButton = event.target.closest("[data-import-arxiv]");
