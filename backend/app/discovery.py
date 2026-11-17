@@ -1,7 +1,9 @@
 """Bounded arXiv discovery/import through fixed public endpoints only."""
 from __future__ import annotations
 import io
+import logging
 import re
+import socket
 import ssl
 import urllib.error
 import urllib.parse
@@ -15,6 +17,7 @@ from app import papers
 
 router=APIRouter(prefix='/api/library',tags=['discovery'])
 ARXIV_ID=re.compile(r'^\d{4}\.\d{4,5}(?:v\d+)?$')
+logger = logging.getLogger(__name__)
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -30,8 +33,27 @@ def fetch(url: str, limit: int, allowed_hosts: set[str]) -> bytes:
             result=response.read(limit+1)
         if len(result)>limit: raise HTTPException(413,'外部文件超过导入限制。')
         return result
+    except urllib.error.HTTPError as error:
+        logger.warning('arXiv upstream HTTP failure: host=%s status=%s', parsed.hostname, error.code)
+        if error.code == 429:
+            detail = 'arXiv 请求过于频繁，已被限流。请稍后重试，或到 arXiv 官网下载 PDF 后手动导入。'
+        elif error.code == 404:
+            detail = 'arXiv 未找到该论文资源，请核对论文标识或版本。'
+        else:
+            detail = 'arXiv 接口暂时无法处理请求，请稍后重试，或到 arXiv 官网下载 PDF 后手动导入。'
+        raise HTTPException(502, detail) from error
     except (urllib.error.URLError,TimeoutError,OSError) as error:
-        raise HTTPException(502,'arXiv 暂时不可用，请稍后重试或手动下载后导入；本地问答不受影响。') from error
+        reason = error.reason if isinstance(error, urllib.error.URLError) else error
+        logger.warning('arXiv connection failure: host=%s reason=%s', parsed.hostname, type(reason).__name__)
+        if isinstance(reason, TimeoutError):
+            detail = 'arXiv 连接超时，20 秒内未完成响应。请稍后重试，或到 arXiv 官网下载 PDF 后手动导入。'
+        elif isinstance(reason, ssl.SSLError):
+            detail = 'arXiv 安全连接失败，请联系管理员检查服务器证书配置；也可到 arXiv 官网下载 PDF 后手动导入。'
+        elif isinstance(reason, socket.gaierror):
+            detail = 'arXiv 域名解析失败，服务器暂时无法连接论文网站。请稍后重试，或下载 PDF 后手动导入。'
+        else:
+            detail = 'arXiv 连接失败，服务器暂时无法访问论文网站。请稍后重试，或下载 PDF 后手动导入；本地问答不受影响。'
+        raise HTTPException(502, detail) from error
 
 class SearchRequest(BaseModel):
     query: str=Field(min_length=3,max_length=180)

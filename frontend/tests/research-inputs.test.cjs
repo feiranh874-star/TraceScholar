@@ -36,6 +36,14 @@ test('validation arrays and objects never become object Object',()=>{
   assert.equal(localize('明确错误',400),'明确错误');
 });
 
+test('arXiv connection errors keep the actionable upstream message without exposing arbitrary server errors',()=>{
+  const localize=vm.runInNewContext(extract('  function localizeApiError(', '  function friendlyError(')+'\nlocalizeApiError');
+  for(const message of ['arXiv 连接超时，请稍后重试。','arXiv 请求过于频繁，已被限流。','论文搜索接口返回了无法解析的数据。']) {
+    assert.equal(localize(message,502),message);
+  }
+  assert.equal(localize('Internal traceback: private server path',500),'服务处理失败，请稍后重试。');
+});
+
 test('folder search sends its collection ID and preserves it while paging',async()=>{
   const h=harness();h.cells.researchQuestion.value='attention';h.elements.researchPaperScope.value='collection:folder-12';
   await h.handlers.searchLibraryMentions();h.elements.researchPaperScope.value='collection:other-folder';await h.handlers.searchLibraryMentions(2);

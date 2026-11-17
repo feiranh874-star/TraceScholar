@@ -1,7 +1,10 @@
 import io
 import json
+import socket
+import ssl
 import subprocess
 import time
+import urllib.error
 import uuid
 import pymupdf
 import pytest
@@ -185,3 +188,35 @@ def test_external_search_parse_import_and_url_restrictions(client,monkeypatch):
     assert client.post('/api/library/import',json={'arxiv_id':'1706.03762v7'}).status_code==201
     assert client.post('/api/library/import',json={'arxiv_id':'http://127.0.0.1/private'}).status_code==422
     assert client.post('/api/library/graph',json={'paper_ids':['../../outside']}).status_code==422
+
+
+@pytest.mark.parametrize('failure, expected', [
+    (TimeoutError(), '连接超时'),
+    (urllib.error.URLError(TimeoutError()), '连接超时'),
+    (urllib.error.URLError(socket.gaierror('test DNS failure')), '域名解析失败'),
+    (urllib.error.URLError(ssl.SSLCertVerificationError('test certificate')), '安全连接失败'),
+    (urllib.error.HTTPError('https://export.arxiv.org', 429, 'limited', {}, None), '已被限流'),
+    (urllib.error.HTTPError('https://export.arxiv.org', 503, 'unavailable', {}, None), '接口暂时无法处理'),
+    (urllib.error.URLError(ConnectionRefusedError()), '连接失败'),
+], ids=['timeout', 'wrapped-timeout', 'dns', 'tls', 'rate-limit', 'unavailable', 'connection'])
+def test_external_search_distinguishes_upstream_failures(client, monkeypatch, failure, expected):
+    class FailingOpener:
+        def open(self, *args, **kwargs):
+            raise failure
+
+    monkeypatch.setattr(discovery.urllib.request, 'build_opener', lambda *args: FailingOpener())
+    response = client.post('/api/library/search', json={'query': 'Attention Is All You Need'})
+    assert response.status_code == 502
+    assert expected in response.json()['detail']
+    assert '手动导入' in response.json()['detail']
+
+
+def test_external_search_separates_empty_results_from_invalid_upstream_response(client, monkeypatch):
+    monkeypatch.setattr(discovery, 'fetch', lambda *args: b'<feed xmlns="http://www.w3.org/2005/Atom"/>')
+    response = client.post('/api/library/search', json={'query': 'Unknown paper title'})
+    assert response.status_code == 200
+    assert response.json()['items'] == []
+    monkeypatch.setattr(discovery, 'fetch', lambda *args: b'not an XML response')
+    response = client.post('/api/library/search', json={'query': 'Unknown paper title'})
+    assert response.status_code == 502
+    assert '无法解析' in response.json()['detail']

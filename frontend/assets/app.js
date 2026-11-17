@@ -174,6 +174,7 @@
     if (/Could not store/i.test(value)) return "文件保存失败，请联系管理员检查服务存储。";
     if (/模型服务尚未配置|LLM_API_KEY/i.test(value)) return "模型服务尚未配置，请联系管理员设置接口信息。";
     if (/模型服务|模型返回|模型响应|连接模型/i.test(value)) return value;
+    if ((status === 502 || status === 504) && /^(arXiv |论文搜索接口)/.test(value)) return value;
     if (status === 413) return "文件超过系统允许的处理范围。";
     if (status >= 500) return "服务处理失败，请稍后重试。";
     return value || "请求失败，请稍后重试。";
