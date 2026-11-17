@@ -66,6 +66,21 @@ class RetrievalRequest(BaseModel):
     limit: int = Field(default=6, ge=1, le=12)
 
 
+class LibraryMentionRequest(BaseModel):
+    """Search all indexed papers; pagination limits display, not search scope."""
+
+    question: str = Field(min_length=1, max_length=500)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=10, ge=1, le=50)
+
+    @field_validator("question")
+    @classmethod
+    def nonempty_question(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("输入不能为空")
+        return value.strip()
+
+
 class ComparisonRequest(BaseModel):
     """A comparison must explicitly name at least two papers."""
 

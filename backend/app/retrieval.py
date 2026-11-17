@@ -86,7 +86,7 @@ def tokenize(value: str) -> list[str]:
     return tokens
 
 
-def _query_variants(question: str) -> list[list[str]]:
+def _query_variants(question: str, concept_search: bool = False) -> list[list[str]]:
     """Preserve literal matching and add a narrow offline Chinese-English query."""
 
     query_text = _normalize(question).replace("β", "beta").replace("ϵ", "epsilon")
@@ -97,6 +97,8 @@ def _query_variants(question: str) -> list[list[str]]:
         " ",
         query_text,
     )
+    if concept_search:
+        query_text = re.sub(r"请问|请找出|请查找|帮我找|提到过|提及过|提到了|提到|出现过|讨论过|讨论了|哪些论文|哪几篇论文|哪篇论文|论文中|论文里|的信息|这个信息|关于|有关|相关|有没有|是否|在哪|哪里|\bwhich papers\b|\bmention(?:ed|s)?\b|\bdiscuss(?:ed|es)?\b", " ", query_text)
     literal_tokens = tokenize(query_text)
     # A few official fine-grained questions use symbols or Chinese wording
     # that differs from the PDF text layer. These are fixed, auditable aliases,
@@ -124,7 +126,7 @@ def _query_variants(question: str) -> list[list[str]]:
     # context to retrieve an unrelated paper. Unrecognized Chinese stays in
     # the literal query instead of being silently translated or invented.
     translated = list(dict.fromkeys(WORD_PATTERN.findall(query_text) + translated))
-    if len(translated) >= 2 and translated != literal_tokens and not definition_question:
+    if len(translated) >= (1 if concept_search else 2) and translated != literal_tokens and not definition_question:
         variants.append(translated)
     # Short definitional questions contain little context: resolve the known
     # research term to two related English concepts rather than matching the
@@ -139,7 +141,7 @@ def _translated_phrases(question: str) -> list[str]:
     return [english for chinese, english in RESEARCH_TERMS.items() if chinese in normalized]
 
 
-def _load_candidates(paper_ids: set[str]) -> list[dict[str, Any]]:
+def _load_candidates(paper_ids: set[str], exclude_references: bool = False) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for metadata in paper_store._all_metadata():
         paper_id = metadata["paper_id"]
@@ -174,6 +176,14 @@ def _load_candidates(paper_ids: set[str]) -> list[dict[str, Any]]:
             if not text:
                 continue
             source = chunk.get("source") or {}
+            section_title = section_titles.get(source.get("section_id"))
+            if exclude_references:
+                if re.fullmatch(r"(?:[\d.]+\s*)?(?:references|bibliography|参考文献)", str(section_title or "").strip(), re.I):
+                    continue
+                # A chunk can straddle the end of the body and reference list.
+                text = re.split(r"(?im)^\s*(?:[\d.]+\s+)?(?:references|bibliography|参考文献)\s*$", text, maxsplit=1)[0].strip()
+                if not text:
+                    continue
             candidates.append(
                 {
                     "chunk": chunk,
@@ -190,20 +200,22 @@ def search_evidence(
     question: str,
     *,
     paper_ids: list[str] | None = None,
-    limit: int = 6,
+    limit: int | None = 6,
     ranker: str = "bm25",
     diversify_by_work: bool = False,
     relax_query_coverage: bool = False,
+    exclude_references: bool = False,
+    concept_search: bool = False,
 ) -> tuple[list[RetrievalEvidenceRecord], int]:
     """Rank local chunks with the selected lexical/vector ranking strategy."""
 
     if ranker not in {"legacy", "bm25", "cosine", "hybrid"}:
         raise ValueError("ranker must be legacy, bm25, cosine, or hybrid")
 
-    query_variants = [Counter(tokens) for tokens in _query_variants(question) if tokens]
+    query_variants = [Counter(tokens) for tokens in _query_variants(question, concept_search) if tokens]
     if not query_variants:
         return [], 0
-    candidates = _load_candidates(set(paper_ids or []))
+    candidates = _load_candidates(set(paper_ids or []), exclude_references)
     if not candidates:
         return [], 0
 
@@ -333,12 +345,12 @@ def search_evidence(
             work_id = str(candidate["metadata"].get("work_id") or candidate["metadata"]["paper_id"])
             work_groups.setdefault(work_id, []).append((score, candidate))
         diversified: list[tuple[float, dict[str, Any]]] = []
-        while len(diversified) < limit and work_groups:
+        while (limit is None or len(diversified) < limit) and work_groups:
             exhausted = []
             for work_id, group in work_groups.items():
                 if group:
                     diversified.append(group.pop(0))
-                    if len(diversified) >= limit:
+                    if limit is not None and len(diversified) >= limit:
                         break
                 if not group:
                     exhausted.append(work_id)

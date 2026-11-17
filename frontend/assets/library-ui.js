@@ -56,6 +56,7 @@
       pickers.set(select, picker);
       picker.draw = () => {
         const selected = picker.papers.find(p => p.paper_id === select.value);
+        picker.summary.title = selected ? title(selected) : '请选择论文';
         picker.summary.textContent = selected ? title(selected) : picker.options.all ? '全部已入库论文（' + picker.papers.length + '）' : '请选择论文';
         const rows = recent(picker.papers).filter(p => matches(p, picker.search.value));
         picker.list.innerHTML = (picker.options.all ? '<button type="button" data-pick="" aria-pressed="' + (!select.value) + '"><strong>全部已入库论文</strong><small>在整个论文库中查找证据</small></button>' : '') + rows.map(p => '<button type="button" data-pick="' + esc(p.paper_id) + '" aria-pressed="' + (select.value === p.paper_id) + '"><strong>' + esc(title(p)) + '</strong><small>' + esc(p.filename) + ' · ' + esc(date(p)) + '</small>' + (p.notes ? '<span class="picker-note">备注：' + esc(p.notes) + '</span>' : '') + '</button>').join('') + (!rows.length ? '<p class="picker-empty">没有匹配论文，请换个关键词。</p>' : '');

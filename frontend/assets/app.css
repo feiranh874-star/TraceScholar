@@ -3132,3 +3132,14 @@ button.tool-result-card { cursor: pointer; }
 
 .batch-select-hint { margin: 12px 2px 20px; color: var(--ink-soft); font-size: 12px; line-height: 1.9; }
 .batch-select-hint kbd { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; background: white; font: inherit; white-space: nowrap; }
+
+/* Task-oriented guidance and grouped global search results. */
+.field-error{color:#b42335;font-size:13px;margin:8px 0 12px;line-height:1.6}.field-error[hidden]{display:none}
+.beginner-guide{padding:24px;margin-bottom:22px;background:#f7f6ff}.beginner-guide h3{margin:0 0 10px}.beginner-guide p{font-size:14px;color:var(--muted);line-height:1.8}
+.task-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.task-links a{display:block;padding:14px 16px;background:white;border:1px solid var(--line);border-radius:10px;color:var(--primary-strong);text-decoration:none;font-size:14px;line-height:1.6}
+.mention-pagination{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;margin:24px 0 6px}.mention-pagination span{font-size:13px;color:var(--muted)}
+.evidence-result>small{display:block;color:var(--muted);line-height:1.6;margin-top:12px}.research-actions{flex-wrap:wrap}
+@media(max-width:700px){.task-links{grid-template-columns:minmax(0,1fr)}.beginner-guide{padding:18px}}
+
+.research-actions #searchMentions{grid-column:1/-1;min-height:48px;font-size:13px;white-space:normal;line-height:1.5;padding:12px}
+.research-actions button{height:auto;min-height:46px;line-height:1.5;padding:12px 10px}.evidence-source a.evidence-open{display:inline-flex;align-items:center;text-decoration:none;line-height:1.7}

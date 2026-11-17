@@ -42,12 +42,13 @@ test('OCR stops polling deleted papers',async()=>{
   assert.match(h.cells.ocrDetail.textContent,/返回论文库/);
   assert.deepEqual(h.timers,[]);
 });
-test('evidence navigation preserves its page and return destination',()=>{
+test('evidence opens a new tab and preserves page and return destination',()=>{
   const start=app.indexOf('  function openPaper('),end=app.indexOf('  function validateUpload(',start);
-  let url;
-  const open=vm.runInNewContext(`${app.slice(start,end)}\nopenPaper`,{state:{activeView:'research'},URLSearchParams,window:{location:{assign:value=>{url=value;}}}});
+  let url, target, features;
+  const open=vm.runInNewContext(`${app.slice(start,end)}\nopenPaper`,{state:{activeView:'research'},URLSearchParams,window:{open:(value,t,f)=>{url=value;target=t;features=f;}}});
   open('paper-id',null,4);
   assert.equal(url,'/reader/paper-id?page=4&from=research');
+  assert.equal(target,'_blank');assert.equal(features,'noopener');
 });
 test('fit width fills the reader frame while whole-page mode fits both dimensions',()=>{
   const cells={originalPdfImage:{naturalWidth:600,naturalHeight:800,style:{}},readerCanvas:{clientWidth:820,clientHeight:510},readerZoomLabel:{},fitPage:{setAttribute(){}},fitWidth:{setAttribute(){}}};

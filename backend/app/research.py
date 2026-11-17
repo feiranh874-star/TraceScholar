@@ -12,6 +12,7 @@ from app.models import (
     AnswerCitationRecord,
     AnswerResponse,
     ComparisonRequest,
+    LibraryMentionRequest,
     RetrievalEvidenceRecord,
     RetrievalRequest,
     RetrievalResponse,
@@ -163,6 +164,41 @@ def _answer_with_evidence(
         items=items,
         total_candidates=total_candidates,
     )
+
+
+@router.post("/mentions")
+def library_mentions(request: LibraryMentionRequest) -> dict:
+    """Group every qualifying body match by paper without a top-k paper cap."""
+    evidence, total_candidates = search_evidence(
+        request.question, limit=None, exclude_references=True, concept_search=True,
+    )
+    groups = {}
+    for item in evidence:
+        key = item.source.paper_id
+        group = groups.setdefault(key, {
+            "paper_id": key, "title": item.paper_title or item.filename,
+            "filename": item.filename, "version_label": item.source.version_label,
+            "matched_passages": 0, "pages": set(), "items": [],
+        })
+        group["matched_passages"] += 1
+        group["pages"].update(range(item.source.page_start, item.source.page_end + 1))
+        if len(group["items"]) < 3:
+            group["items"].append(item.model_dump())
+    ordered = list(groups.values())  # First occurrence follows relevance order.
+    for group in ordered:
+        group["pages"] = sorted(group["pages"])
+    total = len(ordered)
+    total_pages = max(1, (total + request.page_size - 1) // request.page_size)
+    page = min(request.page, total_pages)
+    start = (page - 1) * request.page_size
+    return {
+        "question": request.question, "total_papers": total,
+        "scanned_papers": len(paper_store._all_metadata()),
+        "total_candidates": total_candidates, "page": page,
+        "page_size": request.page_size, "total_pages": total_pages,
+        "items": ordered[start:start + request.page_size],
+        "notice": "按正文关键词及已支持的中英术语匹配，排除已识别的参考文献区。结果为相关原文线索，请打开原页核对；不保证覆盖所有同义表达。",
+    }
 
 
 @router.post("/retrieve")
