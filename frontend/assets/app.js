@@ -1149,7 +1149,7 @@
     if (!validateText("arxivQuery", "arxivError")) return;
     return runTool("searchArxiv", "arxivResult", async output => {
       const data = await toolRequest("/api/library/search", { query: byId("arxivQuery").value.trim() });
-      output.innerHTML = data.items.length ? `<p class="tool-hint">${escapeHtml(data.notice)}</p>` + data.items.map(item => `<article class="tool-result-card"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.authors.join(", "))}</small><span>${escapeHtml(item.summary)}</span><div class="tool-actions"><a href="https://arxiv.org/abs/${encodeURIComponent(item.arxiv_id)}" target="_blank" rel="noopener">查看 arXiv</a><button class="secondary-button" data-import-arxiv="${escapeHtml(item.arxiv_id)}">确认导入 ${escapeHtml(item.arxiv_id)}</button></div></article>`).join("") : '<p>暂未检索到相关论文。可尝试题名中的几个核心词；未找到不代表论文不存在。</p>';
+      output.innerHTML = data.items.length ? `<p class="tool-hint">${escapeHtml(data.notice)}</p>` + data.items.map(item => `<article class="tool-result-card"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.authors.join(", "))}</small><span>${escapeHtml(item.summary)}</span><div class="tool-actions"><a href="https://arxiv.org/abs/${encodeURIComponent(item.arxiv_id)}" target="_blank" rel="noopener">查看 arXiv</a><button class="secondary-button" data-import-arxiv="${escapeHtml(item.arxiv_id)}">确认导入 ${escapeHtml(item.arxiv_id)}</button></div></article>`).join("") : `<p>${escapeHtml(data.search_mode === 'identifier' ? data.notice : '暂未检索到相关论文。可尝试题名中的几个核心词；未找到不代表论文不存在。')}</p>`;
     });
   }
 

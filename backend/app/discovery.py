@@ -74,9 +74,29 @@ def _title_words(title: str) -> list[str]:
     return list(dict.fromkeys(word.casefold() for word in words if word.casefold() not in stopwords))[:15]
 
 
-def _search_title(words: list[str]) -> list[dict]:
-    query=' AND '.join('ti:'+word for word in words)
-    url='https://export.arxiv.org/api/query?'+urllib.parse.urlencode({'search_query':query,'max_results':5})
+def _input_identifier(value: str) -> str | None:
+    value = unicodedata.normalize('NFKC', value).strip()
+    candidate = value
+    if value.lower().startswith('arxiv:'):
+        candidate = value.split(':', 1)[1].strip()
+    elif re.match(r'https?://', value, re.I):
+        try:
+            parsed = urllib.parse.urlparse(value)
+        except ValueError:
+            raise HTTPException(422, 'arXiv 链接格式无效，请检查后重试。')
+        if parsed.netloc.lower() not in {'arxiv.org', 'www.arxiv.org', 'export.arxiv.org'}:
+            raise HTTPException(422, '请输入 arXiv 官方论文链接、编号或英文题名。')
+        match = re.fullmatch(r'/(?:abs|pdf)/([^/]+)/?', parsed.path)
+        candidate = match.group(1).removesuffix('.pdf') if match else ''
+    elif not re.match(r'^\d{4}\.', value):
+        return None
+    if not ARXIV_ID.fullmatch(candidate):
+        raise HTTPException(422, 'arXiv 编号格式无效，例如 1706.03762 或 arXiv:1706.03762v7。')
+    return candidate
+
+
+def _query_arxiv(params: dict) -> list[dict]:
+    url='https://export.arxiv.org/api/query?'+urllib.parse.urlencode(params)
     payload=fetch(url,1024*1024,{'export.arxiv.org'})
     try: root=ET.fromstring(payload)
     except ET.ParseError as error: raise HTTPException(502,'论文搜索接口返回了无法解析的数据。') from error
@@ -98,8 +118,19 @@ def _search_title(words: list[str]) -> list[dict]:
     return items
 
 
+def _search_title(words: list[str]) -> list[dict]:
+    return _query_arxiv({'search_query': ' AND '.join('ti:'+word for word in words), 'max_results': 5})
+
+
 @router.post('/search')
 def search(body: SearchRequest):
+    identifier = _input_identifier(body.query)
+    if identifier:
+        items = _query_arxiv({'id_list': identifier, 'max_results': 1})
+        items = [item for item in items if item['arxiv_id'] == identifier or (
+            'v' not in identifier and re.sub(r'v\d+$', '', item['arxiv_id']) == identifier)]
+        notice = '已按 arXiv 编号定位，请核对题名、作者及版本后再导入。' if items else 'arXiv 暂未返回该编号的论文记录，请核对编号及版本，并确认论文已公开；也可到 arXiv 官网核对。'
+        return {'items':items, 'source':'arXiv identifier lookup', 'search_mode':'identifier', 'notice':notice}
     words = _title_words(body.query)
     if not words: raise HTTPException(422,'请输入有效论文题名。')
     items = _search_title(words)

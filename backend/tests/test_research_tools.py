@@ -272,3 +272,50 @@ def test_external_search_does_not_disguise_upstream_error_as_no_results(client, 
     response=client.post('/api/library/search', json={'query':'Born in the Dark catastrophic collapse'})
     assert response.status_code == 502
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('query', [
+    '1706.03762v7', 'arXiv:1706.03762v7', ' arxiv: 1706.03762v7 ',
+    'https://arxiv.org/abs/1706.03762v7', 'https://arxiv.org/pdf/1706.03762v7.pdf',
+    'https://arxiv.org/pdf/1706.03762v7?download=1',
+])
+def test_external_search_looks_up_identifiers_instead_of_title_words(client, monkeypatch, query):
+    calls=[]
+    xml=b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1706.03762v7</id><title>Attention Is All You Need</title></entry></feed>'
+    monkeypatch.setattr(discovery, 'fetch', lambda url, *args: calls.append(url) or xml)
+    result=client.post('/api/library/search', json={'query':query}).json()
+    assert len(calls) == 1
+    params=discovery.urllib.parse.parse_qs(discovery.urllib.parse.urlparse(calls[0]).query)
+    assert params['id_list'] == ['1706.03762v7']
+    assert 'search_query' not in params
+    assert result['search_mode'] == 'identifier'
+    assert result['items'][0]['title'] == 'Attention Is All You Need'
+
+
+@pytest.mark.parametrize('query', [
+    'arxiv:invalid', 'https://example.com/abs/1706.03762',
+    'https://arxiv.org@127.0.0.1/abs/1706.03762', 'https://arxiv.org:443/abs/1706.03762',
+    'https://arxiv.org/pdf/../../private', 'https://arxiv.org:invalid/abs/1706.03762',
+])
+def test_external_search_rejects_invalid_identifiers_and_untrusted_links(client, monkeypatch, query):
+    def forbidden(*args):
+        raise AssertionError('Invalid input must not be fetched')
+    monkeypatch.setattr(discovery, 'fetch', forbidden)
+    assert client.post('/api/library/search', json={'query':query}).status_code == 422
+
+
+def test_external_search_identifier_missing_is_not_treated_as_title_search(client, monkeypatch):
+    calls=[]
+    monkeypatch.setattr(discovery, 'fetch', lambda url, *args: calls.append(url) or b'<feed xmlns="http://www.w3.org/2005/Atom"/>')
+    result=client.post('/api/library/search', json={'query':'arXiv:2611.21545'}).json()
+    assert len(calls) == 1
+    assert result['items'] == [] and result['search_mode'] == 'identifier'
+    assert '核对编号' in result['notice']
+
+
+def test_external_search_identifier_does_not_return_a_different_paper_or_version(client, monkeypatch):
+    xml=b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1706.03762v7</id><title>Attention Is All You Need</title></entry></feed>'
+    monkeypatch.setattr(discovery, 'fetch', lambda *args: xml)
+    assert client.post('/api/library/search', json={'query':'1706.03762'}).json()['items']
+    assert client.post('/api/library/search', json={'query':'1706.03762v1'}).json()['items'] == []
+    assert client.post('/api/library/search', json={'query':'2611.21545'}).json()['items'] == []
