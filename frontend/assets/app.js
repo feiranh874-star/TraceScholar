@@ -397,16 +397,18 @@
 
   function renderResearchScope() {
     const currentValue = elements.researchPaperScope.value;
+    const collections = window.TraceLibrary.collections();
     elements.researchPaperScope.innerHTML = [
       `<option value="">全部已入库论文（${state.papers.length}）</option>`,
+      ...collections.map(c => `<option value="collection:${escapeHtml(c.id)}">收藏夹：${escapeHtml(c.name)}（${(c.paper_ids || []).length} 篇）</option>`),
       ...state.papers.map(
         (paper) => `<option value="${escapeHtml(paper.paper_id)}">${escapeHtml(paperTitle(paper))}${paperVersion(paper) ? ` · ${escapeHtml(paperVersion(paper))}` : ""}</option>`,
       ),
     ].join("");
-    if (state.papers.some((paper) => paper.paper_id === currentValue)) {
+    if (state.papers.some((paper) => paper.paper_id === currentValue) || collections.some(c => "collection:" + c.id === currentValue)) {
       elements.researchPaperScope.value = currentValue;
     }
-    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true, searchFirst: true });
+    window.TracePaperUI.mountPicker(elements.researchPaperScope, state.papers, { all: true, searchFirst: true, collections });
     const selectedIds = new Set(state.comparisonPaperIds);
     const selectedCount = selectedIds.size;
     elements.comparisonPaperList.innerHTML = state.papers.map((paper) => {
@@ -430,6 +432,9 @@
     elements.comparisonModeToggle.innerHTML = state.comparisonMode
       ? '返回证据检索 <span>→</span>'
       : '切换到多篇比较 <span>→</span>';
+    const collectionScope = elements.researchPaperScope.value.startsWith("collection:");
+    byId("searchMentions").classList.toggle("is-hidden", state.comparisonMode);
+    byId("searchMentions").textContent = collectionScope ? "收藏夹查找 · 哪些论文提到过" : "全库查找 · 哪些论文提到过";
     elements.comparisonModeToggle.disabled = state.answering || state.retrieving;
     refreshComparisonSelection();
     elements.researchPaperScope.disabled = state.papers.length === 0;
@@ -635,6 +640,7 @@
   }
 
   let mentionQuestion = "";
+  let mentionQuestionCollection = null;
   function validateText(id, errorId) {
     const input = byId(id), error = byId(errorId), value = input.value.trim();
     error.textContent = value ? "" : "输入不能为空";
@@ -648,18 +654,18 @@
     if (state.retrieving || state.answering) return;
     const question = page === 1 ? validateText("researchQuestion", "researchError") : mentionQuestion;
     if (!question) return;
-    if (page === 1) mentionQuestion = question;
+    if (page === 1) { mentionQuestion = question; mentionQuestionCollection = elements.researchPaperScope.value.startsWith("collection:") ? elements.researchPaperScope.value.slice(11) : null; }
     state.retrieving = true;
     byId("searchMentions").disabled = true;
     renderResearchScope();
     clearAnswer();
-    elements.evidenceCount.textContent = "正在查找全库正文";
-    elements.evidenceResults.innerHTML = '<div class="evidence-empty">正在查找所有已入库论文…</div>';
+    elements.evidenceCount.textContent = mentionQuestionCollection ? "正在查找所选收藏夹正文" : "正在查找全库正文";
+    elements.evidenceResults.innerHTML = '<div class="evidence-empty">正在查找论文正文…</div>';
     try {
-      const response = await fetch("/api/research/mentions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question, page, page_size:10})});
+      const response = await fetch("/api/research/mentions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question, page, page_size:10, collection_id: mentionQuestionCollection})});
       if (!response.ok) throw await responseError(response);
       const data = await response.json();
-      elements.evidenceCount.textContent = `命中 ${data.total_papers} 篇 · 已查找 ${data.scanned_papers} 篇`;
+      elements.evidenceCount.textContent = `${data.collection_name ? "收藏夹「" + data.collection_name + "」 · " : ""}命中 ${data.total_papers} 篇 · 已查找 ${data.scanned_papers} 篇`;
       elements.evidenceResults.innerHTML = `<p class="tool-hint">查找：${escapeHtml(data.question)}。${escapeHtml(data.notice)}</p>` + (data.items.map(p => `<article class="evidence-result"><div class="evidence-result-head"><strong>${escapeHtml(p.title)}</strong></div><p class="evidence-meta">${escapeHtml(p.version_label || "")} · ${p.matched_passages} 个相关片段 · 原始页码 ${p.pages.join("、")}</p>${p.items.map(e => `<details class="evidence-source"><summary>第 ${e.source.page_start} 页 · ${escapeHtml(displaySectionTitle(e.section_title) || "查看正文片段")}</summary><p>${escapeHtml(e.text)}</p><a class="evidence-open" href="/reader/${encodeURIComponent(p.paper_id)}?${new URLSearchParams({page:String(e.source.page_start),from:"research",highlight:e.text.slice(0,120)})}" target="_blank" rel="noopener">在新标签页核对原文 ↗</a></details>`).join("")}<small>每篇展示最多 3 个相关片段，页码列出全部命中位置。</small></article>`).join("") || '<div class="evidence-empty">未找到相关正文。可以缩短为关键术语，或尝试原文中的英文术语。</div>') + (data.total_pages > 1 ? `<nav class="mention-pagination" aria-label="全库查找结果翻页"><button type="button" class="secondary-button" data-mentions-page="${data.page-1}" ${data.page===1?'disabled':''}>上一页</button><span>第 ${data.page} / ${data.total_pages} 页 · 每页 10 篇</span><button type="button" class="secondary-button" data-mentions-page="${data.page+1}" ${data.page===data.total_pages?'disabled':''}>下一页</button></nav>` : "");
     } catch (error) {
       elements.evidenceCount.textContent = "查找失败";
@@ -697,7 +703,7 @@
       const response = await fetch("/api/research/retrieve", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ question, paper_ids: selectedPaperId ? [selectedPaperId] : [], limit: 6 }),
+        body: JSON.stringify({ question, paper_ids: selectedPaperId && !selectedPaperId.startsWith("collection:") ? [selectedPaperId] : [], collection_id: selectedPaperId.startsWith("collection:") ? selectedPaperId.slice(11) : null, limit: 6 }),
       });
       if (!response.ok) throw await responseError(response);
       const payload = await response.json();
@@ -743,7 +749,7 @@
       const response = await fetch("/api/research/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ question, paper_ids: selectedPaperId ? [selectedPaperId] : [], limit: 6 }),
+        body: JSON.stringify({ question, paper_ids: selectedPaperId && !selectedPaperId.startsWith("collection:") ? [selectedPaperId] : [], collection_id: selectedPaperId.startsWith("collection:") ? selectedPaperId.slice(11) : null, limit: 6 }),
       });
       if (!response.ok) throw await responseError(response);
       const payload = await response.json();
@@ -1241,9 +1247,10 @@
     byId("searchMentions").addEventListener("click", () => searchLibraryMentions());
     [["arxivQuery","arxivError"],["outlineIdea","outlineError"],["researchQuestion","researchError"]].forEach(([id,error]) => byId(id).addEventListener("input", () => {byId(error).hidden=true;byId(id).removeAttribute("aria-invalid");}));
     elements.evidenceResults.addEventListener("click", event => {const button=event.target.closest("[data-mentions-page]");if(button&&!button.disabled)searchLibraryMentions(Number(button.dataset.mentionsPage));});
+    elements.researchPaperScope.addEventListener("change", renderResearchScope);
     elements.researchAnswer.addEventListener("click", generateAnswer);
     elements.comparisonModeToggle.addEventListener("click", () => {
-      if (!state.comparisonMode && elements.researchPaperScope.value && !state.comparisonPaperIds.length) {
+      if (!state.comparisonMode && elements.researchPaperScope.value && !elements.researchPaperScope.value.startsWith("collection:") && !state.comparisonPaperIds.length) {
         state.comparisonPaperIds = [elements.researchPaperScope.value];
       }
       state.comparisonMode = !state.comparisonMode;

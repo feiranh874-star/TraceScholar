@@ -166,11 +166,24 @@ def _answer_with_evidence(
     )
 
 
+def _collection_scope(request: RetrievalRequest | LibraryMentionRequest) -> tuple[str | None, str | None]:
+    """Validate a logical folder without converting an empty folder into all papers."""
+    if request.collection_id is None:
+        return None, None
+    if request.paper_ids:
+        raise HTTPException(422, "请选择收藏夹或单篇论文中的一种检索范围。")
+    from app.organizer import _collections, _find
+    collection = _find(_collections(), request.collection_id)
+    return collection["id"], collection["name"]
+
+
 @router.post("/mentions")
 def library_mentions(request: LibraryMentionRequest) -> dict:
     """Group every qualifying body match by paper without a top-k paper cap."""
+    collection_id, collection_name = _collection_scope(request)
     evidence, total_candidates = search_evidence(
         request.question, limit=None, exclude_references=True, concept_search=True,
+        paper_ids=request.paper_ids, collection_id=collection_id,
     )
     groups = {}
     for item in evidence:
@@ -193,7 +206,10 @@ def library_mentions(request: LibraryMentionRequest) -> dict:
     start = (page - 1) * request.page_size
     return {
         "question": request.question, "total_papers": total,
-        "scanned_papers": len(paper_store._all_metadata()),
+        "scanned_papers": sum(1 for p in paper_store._all_metadata()
+                              if (not request.paper_ids or p["paper_id"] in request.paper_ids)
+                              and (collection_id is None or collection_id in p.get("collection_ids", []))),
+        "collection_name": collection_name,
         "total_candidates": total_candidates, "page": page,
         "page_size": request.page_size, "total_pages": total_pages,
         "items": ordered[start:start + request.page_size],
@@ -205,9 +221,11 @@ def library_mentions(request: LibraryMentionRequest) -> dict:
 def retrieve_evidence(request: RetrievalRequest) -> RetrievalResponse:
     """Return ranked paper passages without calling an external model."""
 
+    collection_id, _ = _collection_scope(request)
     items, total_candidates = search_evidence(
         request.question,
         paper_ids=request.paper_ids,
+        collection_id=collection_id,
         limit=request.limit,
         diversify_by_work=not request.paper_ids,
     )
@@ -222,9 +240,11 @@ def retrieve_evidence(request: RetrievalRequest) -> RetrievalResponse:
 def answer_from_evidence(request: RetrievalRequest, http_request: Request) -> AnswerResponse:
     """Generate an answer while preserving citations from verified local evidence."""
 
+    collection_id, _ = _collection_scope(request)
     items, total_candidates = search_evidence(
         request.question,
         paper_ids=request.paper_ids,
+        collection_id=collection_id,
         limit=request.limit,
         diversify_by_work=not request.paper_ids,
     )
@@ -242,6 +262,7 @@ def answer_from_evidence(request: RetrievalRequest, http_request: Request) -> An
 def research_agent(request: RetrievalRequest, http_request: Request) -> AgentResponse:
     """Route evidence-only questions or run the grounded-answer tool sequence."""
 
+    collection_id, _ = _collection_scope(request)
     intent = _classify_intent(request.question)
     if intent == "comparison" and len(request.paper_ids) > 1:
         if len(request.paper_ids) > 5:
@@ -278,6 +299,7 @@ def research_agent(request: RetrievalRequest, http_request: Request) -> AgentRes
     items, total_candidates = search_evidence(
         retrieval_question,
         paper_ids=request.paper_ids,
+        collection_id=collection_id,
         limit=request.limit,
         diversify_by_work=not request.paper_ids,
     )

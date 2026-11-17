@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -63,6 +64,7 @@ class RetrievalRequest(BaseModel):
 
     question: str = Field(min_length=2, max_length=500)
     paper_ids: list[str] = Field(default_factory=list, max_length=50)
+    collection_id: UUID | None = None
     limit: int = Field(default=6, ge=1, le=12)
 
 
@@ -72,6 +74,8 @@ class LibraryMentionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=10, ge=1, le=50)
+    paper_ids: list[str] = Field(default_factory=list, max_length=50)
+    collection_id: UUID | None = None
 
     @field_validator("question")
     @classmethod

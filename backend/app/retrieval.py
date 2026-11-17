@@ -141,11 +141,13 @@ def _translated_phrases(question: str) -> list[str]:
     return [english for chinese, english in RESEARCH_TERMS.items() if chinese in normalized]
 
 
-def _load_candidates(paper_ids: set[str], exclude_references: bool = False) -> list[dict[str, Any]]:
+def _load_candidates(paper_ids: set[str], exclude_references: bool = False, collection_id: str | None = None) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for metadata in paper_store._all_metadata():
         paper_id = metadata["paper_id"]
         if paper_ids and paper_id not in paper_ids:
+            continue
+        if collection_id is not None and collection_id not in metadata.get("collection_ids", []):
             continue
         structure = paper_store._read_metadata(
             paper_store._papers_dir() / paper_id / "structure.json"
@@ -206,6 +208,7 @@ def search_evidence(
     relax_query_coverage: bool = False,
     exclude_references: bool = False,
     concept_search: bool = False,
+    collection_id: str | None = None,
 ) -> tuple[list[RetrievalEvidenceRecord], int]:
     """Rank local chunks with the selected lexical/vector ranking strategy."""
 
@@ -215,7 +218,7 @@ def search_evidence(
     query_variants = [Counter(tokens) for tokens in _query_variants(question, concept_search) if tokens]
     if not query_variants:
         return [], 0
-    candidates = _load_candidates(set(paper_ids or []), exclude_references)
+    candidates = _load_candidates(set(paper_ids or []), exclude_references, collection_id)
     if not candidates:
         return [], 0
 

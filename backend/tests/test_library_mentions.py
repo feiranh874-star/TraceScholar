@@ -18,7 +18,7 @@ def library(tmp_path, monkeypatch):
         folder = tmp_path / 'papers' / pid
         folder.mkdir(parents=True)
         metadata = {'paper_id': pid, 'filename': pid + '.pdf', 'title': 'Study ' + pid,
-                    'archived': archived, 'work_id': pid}
+                    'archived': archived, 'work_id': pid, 'sha256': '0'*64, 'page_count': 1, 'parse_status': 'ready', 'needs_ocr_pages': [], 'warnings': [], 'created_at': '2026-01-01T00:00:00Z'}
         (folder / 'metadata.json').write_text(json.dumps(metadata))
         structure = {'sections': [{'section_id': 's1', 'title': section}], 'chunks': [
             {'chunk_id': f'c{i}', 'text': text,
@@ -70,3 +70,39 @@ def test_comparison_still_requires_small_explicit_scope(library):
     client, add = library
     ids = [add('Attention experiment.') for _ in range(6)]
     assert client.post('/api/research/compare', json={'question': 'compare attention', 'paper_ids': ids}).status_code == 422
+
+def test_collection_scope_returns_only_members(library, tmp_path):
+    client, add = library
+    first, second = add('Attention in the selected collection.'), add('Attention outside the selected collection.')
+    collection = client.post('/api/library/collections', json={'name': '12'}).json()
+    # Attach only first paper through the public organizer endpoint.
+    response = client.patch(f'/api/papers/{first}/organization', json={'collection_ids': [collection['id']], 'notes': ''})
+    assert response.status_code == 200
+    data = client.post('/api/research/mentions', json={'question': 'attention', 'collection_id': collection['id']}).json()
+    assert data['collection_name'] == '12'
+    assert data['total_papers'] == 1
+    assert data['items'][0]['paper_id'] == first
+
+@pytest.mark.parametrize('endpoint', ['mentions', 'retrieve', 'answer', 'agent'])
+def test_empty_or_deleted_collection_never_falls_back_to_whole_library(library, endpoint):
+    client, add = library
+    add('Attention should not leak into an empty folder.')
+    folder = client.post('/api/library/collections', json={'name': 'Empty'}).json()
+    body = {'question': 'attention', 'collection_id': folder['id']}
+    response = client.post('/api/research/' + endpoint, json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['items'] == []
+    if endpoint == 'mentions':
+        assert data['scanned_papers'] == 0
+    assert client.delete('/api/library/collections/' + folder['id']).status_code == 204
+    assert client.post('/api/research/' + endpoint, json=body).status_code == 404
+
+
+def test_collection_and_explicit_paper_are_not_silently_combined(library):
+    client, add = library
+    pid = add('Attention body.')
+    folder = client.post('/api/library/collections', json={'name': '12'}).json()
+    body = {'question': 'attention', 'collection_id': folder['id'], 'paper_ids': [pid]}
+    assert client.post('/api/research/mentions', json=body).status_code == 422
+    assert client.post('/api/research/retrieve', json=body).status_code == 422

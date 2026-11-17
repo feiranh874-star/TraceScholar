@@ -8,7 +8,7 @@ function cell(value = '') { return {value, hidden: true, textContent: '', innerH
 function harness() {
   const cells = Object.fromEntries(['arxivQuery','arxivError','outlineIdea','outlineError','researchQuestion','researchError','searchMentions'].map(id=>[id,cell()]));
   let calls=[];
-  const elements = {researchQuestion:cells.researchQuestion,evidenceCount:cell(),evidenceResults:cell()};
+  const elements = {researchPaperScope:cell(),researchQuestion:cells.researchQuestion,evidenceCount:cell(),evidenceResults:cell()};
   const context = {byId:id=>cells[id],elements,state:{retrieving:false},clearAnswer(){},renderResearchScope(){},escapeHtml:String,displaySectionTitle:String,friendlyError:e=>e.message,responseError:async()=>new Error('失败'),
     fetch: async(url,opts)=>{const body=JSON.parse(opts.body);calls.push(body);return {ok:true,json:async()=>({question:body.question,total_papers:13,scanned_papers:15,page:body.page,total_pages:2,notice:'正文匹配',items:[]})};},runTool:async()=>{calls.push('tool');}};
   const handlers = vm.runInNewContext(extract('  let mentionQuestion', '  async function retrieveEvidence') + '\n' + extract('  async function searchArxiv()', '  async function importArxiv') + '\n' + extract('  async function createResearchOutline(', '  async function searchArxiv()') + '\n({searchLibraryMentions,searchArxiv,createResearchOutline})', context);
@@ -34,4 +34,10 @@ test('validation arrays and objects never become object Object',()=>{
   assert.match(localize([{loc:['body','query'],msg:'too short'}],422),/输入内容/);
   assert.match(localize({unexpected:true},400),/请求参数/);
   assert.equal(localize('明确错误',400),'明确错误');
+});
+
+test('folder search sends its collection ID and preserves it while paging',async()=>{
+  const h=harness();h.cells.researchQuestion.value='attention';h.elements.researchPaperScope.value='collection:folder-12';
+  await h.handlers.searchLibraryMentions();h.elements.researchPaperScope.value='collection:other-folder';await h.handlers.searchLibraryMentions(2);
+  assert.equal(h.calls.length,2);assert.equal(h.calls[0].collection_id,'folder-12');assert.equal(h.calls[1].collection_id,'folder-12');
 });
