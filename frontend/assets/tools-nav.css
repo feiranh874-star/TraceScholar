@@ -1,0 +1,44 @@
+[hidden] { display:none !important; }
+.tools-navigation { margin:0 0 20px; flex:none; }
+.tools-navigation>summary { display:flex;align-items:center;gap:12px;min-height:46px;padding:12px;border-radius:11px;cursor:pointer;list-style:none;color:#edf0ff;font-size:14px;font-weight:650;background:rgb(120 115 245 / 12%); }
+.tools-navigation>summary::-webkit-details-marker { display:none; }
+.tools-nav-chevron { margin-left:auto;transition:transform .15s; }
+.tools-navigation:not([open]) .tools-nav-chevron { transform:rotate(-90deg); }
+.tools-nav-group { margin-top:18px; }
+.tools-catalog-link { display:flex;justify-content:space-between;color:#c8c1fc;font-size:12px;padding:14px 12px 0;text-decoration:none; }
+.tools-nav-group>span { display:block;padding:0 12px 7px;font-size:10px;color:#8794ac;letter-spacing:.08em; }
+.tools-nav-group>a { display:flex;justify-content:space-between;gap:8px;padding:9px 12px;margin:2px 0;border-radius:8px;text-decoration:none;font-size:12px;line-height:1.6;color:#b9c3d6; }
+.tools-nav-group>a>span { color:#76829b; }
+.tools-nav-group>a:hover,.tools-nav-group>a[aria-current=page] { background:rgb(125 118 255 / 18%);color:white; }
+.tools-nav-group>a[aria-current=page] { box-shadow:inset 3px 0 #9690ff; }
+.tools-navigation a:focus-visible,.tools-navigation summary:focus-visible { outline:2px solid #a8a2ff;outline-offset:2px; }
+.tool-catalog-group { margin:22px 0 28px; }
+.tool-catalog-group>h3 { font-size:14px;color:var(--ink-soft);margin-bottom:12px; }
+.tool-catalog-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px; }
+.tool-catalog-card { display:block;min-width:0;padding:22px;border-radius:16px;border:1px solid var(--line);background:white;text-decoration:none;box-shadow:var(--shadow-sm);transition:border-color .15s,transform .15s; }
+.tool-catalog-card:hover { border-color:#aaa4ed;transform:translateY(-2px); }
+.tool-catalog-card strong { display:flex;justify-content:space-between;gap:14px;font-size:15px;color:var(--ink); }
+.tool-catalog-card strong span { color:var(--primary); }
+.tool-catalog-card p { font-size:12px;line-height:1.8;color:var(--muted);margin:10px 0 0; }
+.is-focused-tool .tool-grid { display:block; }
+.is-focused-tool .tool-panel { width:100%;padding:28px; }
+.is-focused-tool .tools-selection { margin-bottom:20px; }
+.is-focused-tool .tool-panel>h3 { margin-top:0; }
+.is-focused-tool .tool-panel>.section-kicker { display:none; }
+a.external-paper-button { display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 16px;background:#eeeaff;border:1px solid #dcd5fc;color:#5545b8;text-decoration:none;white-space:nowrap;font-size:13px;line-height:1.5; }
+a.external-paper-button:hover { background:#e1dafa;border-color:#b9a9ef;color:#4935a5; }
+.has-tool-sidebar .workspace-header { margin-left:var(--sidebar-width); }
+.has-tool-sidebar .workspace-main { max-width:1500px;margin-left:var(--sidebar-width);margin-right:auto; }
+.tool-workspace-sidebar .nav-item { text-decoration:none;font-size:13px; }
+.is-focused-workspace .workspace-grid { grid-template-columns:minmax(0,1fr); }
+.is-focused-workspace .workspace-target-row:has(#activePage[hidden]),.is-focused-workspace .workspace-target-row:has(label[hidden]) { grid-template-columns:minmax(0,1fr) auto; }
+.is-focused-workspace .workspace-header h1 { font-size:26px; }
+@media(max-width:1150px) { .tool-catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:960px) {
+  .has-tool-sidebar .tool-workspace-sidebar { position:static;width:auto;transform:none;max-height:none;padding:18px 20px;box-shadow:none; }
+  .has-tool-sidebar .tool-workspace-sidebar .brand,.has-tool-sidebar .tool-workspace-sidebar .primary-nav,.has-tool-sidebar .tool-workspace-sidebar .nav-section-label { display:none; }
+  .has-tool-sidebar .tools-navigation { margin:0; }
+  .has-tool-sidebar .tools-navigation nav { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:48vh;overflow:auto; }
+  .has-tool-sidebar .workspace-header,.has-tool-sidebar .workspace-main { margin-left:0; }
+}
+@media(max-width:600px) { .tool-catalog-grid { grid-template-columns:minmax(0,1fr); }.is-focused-tool .tool-panel { padding:20px; }.has-tool-sidebar .tools-navigation nav { grid-template-columns:minmax(0,1fr); } }
