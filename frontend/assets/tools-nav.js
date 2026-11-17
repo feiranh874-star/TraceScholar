@@ -24,10 +24,27 @@
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const href = tool => tool.kind === 'home' ? '/?view=tools&tool='+tool.id : '/workspace?tab='+tool.panel+'&tool='+tool.id;
   function current() { return tools.find(t => t.id === new URLSearchParams(location.search).get('tool')); }
+  function initSidebar() {
+    const button=document.querySelector('[data-sidebar-collapse]');
+    if(!button)return;
+    const storageKey='tracescholar-sidebar-collapsed';
+    const setCollapsed=(collapsed,save=false)=>{
+      document.body.classList.toggle('sidebar-is-collapsed',collapsed);
+      const label=collapsed?'展开侧边栏':'收起侧边栏';
+      button.setAttribute('aria-label',label);
+      button.setAttribute('title',label);
+      button.setAttribute('aria-expanded',String(!collapsed));
+      if(save)try{localStorage.setItem(storageKey,String(collapsed));}catch{}
+    };
+    let collapsed=false;
+    try{collapsed=localStorage.getItem(storageKey)==='true';}catch{}
+    setCollapsed(collapsed);
+    button.onclick=()=>setCollapsed(!document.body.classList.contains('sidebar-is-collapsed'),true);
+  }
   function navigation() {
     const selected = current();
     const groups = [...new Set(tools.map(t => t.group))];
-    return '<details class="tools-navigation" open><summary><span aria-hidden="true">◇</span>研究工具<span class="tools-nav-chevron" aria-hidden="true">⌄</span></summary><nav aria-label="研究工具"><a class="tools-catalog-link" href="/?view=tools" target="_blank" rel="noopener">全部工具 <span aria-hidden="true">↗</span></a>'+groups.map(group=>'<div class="tools-nav-group"><span>'+group+'</span>'+tools.filter(t=>t.group===group).map(t=>'<a href="'+href(t)+'" target="_blank" rel="noopener"'+(selected?.id===t.id?' aria-current="page"':'')+'>'+t.name+'<span aria-hidden="true">↗</span></a>').join('')+'</div>').join('')+'</nav></details>';
+    return '<details class="tools-navigation" open><summary><span aria-hidden="true">◇</span>研究工具<span class="tools-nav-chevron" aria-hidden="true">⌄</span></summary><nav aria-label="研究工具"><a class="tools-catalog-link" href="/?view=tools" target="_blank" rel="noopener">全部工具 <span aria-hidden="true">↗</span></a>'+groups.map(group=>'<details class="tools-nav-group"'+(selected?.group===group?' open':'')+'><summary>'+group+'<span aria-hidden="true">⌄</span></summary><div class="tools-nav-group-links">'+tools.filter(t=>t.group===group).map(t=>'<a href="'+href(t)+'" target="_blank" rel="noopener"'+(selected?.id===t.id?' aria-current="page"':'')+'>'+t.name+'<span aria-hidden="true">↗</span></a>').join('')+'</div></details>').join('')+'</nav></details>';
   }
   function mount() {
     document.querySelectorAll('[data-tools-navigation]').forEach(host => {
@@ -82,4 +99,5 @@
   }
   window.TraceTools={tools,href,current,mount,applyHome,applyWorkspace};
   mount();
+  initSidebar();
 })();

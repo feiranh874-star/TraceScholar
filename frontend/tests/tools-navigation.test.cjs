@@ -8,7 +8,7 @@ const workspace=fs.readFileSync(__dirname+'/../workspace.html','utf8');
 function cell(){return {hidden:false,textContent:'',value:'',closest:()=>null,classList:{add(){},toggle(){}}};}
 function load(query=''){
  const cells={},cards={},selectionIntro={querySelector:()=>cell()};
- const document={body:cell(),title:'',getElementById:id=>cells[id]||=(cell()),querySelectorAll:()=>[],querySelector:()=>cell()};
+ const document={body:cell(),title:'',getElementById:id=>cells[id]||=(cell()),querySelectorAll:()=>[],querySelector:selector=>selector==='[data-sidebar-collapse]'?null:cell()};
  document.body.classList.contains=()=>false;
  const window={};vm.runInNewContext(source,{window,document,location:{search:query},URLSearchParams,matchMedia:()=>({matches:false})});
  return {api:window.TraceTools,document,cells,cards,selectionIntro};
@@ -33,6 +33,17 @@ test('every sidebar tool opens a separate tab with its own link',()=>{
  assert.ok(host.innerHTML.includes('<details'));
  assert.ok(host.innerHTML.includes('aria-current="page"'));
 });
+test('tool groups are independently collapsible and only the current group opens initially',()=>{
+ for(const query of ['', '?tool=online', '?tool=references']){
+  const h=load(query),host=cell();
+  h.document.querySelectorAll=selector=>selector==='[data-tools-navigation]'?[host]:[];
+  h.api.mount();
+  const groups=[...host.innerHTML.matchAll(/<details class="tools-nav-group"( open)?><summary>([^<]+)/g)];
+  assert.equal(groups.length,5);
+  assert.equal(groups.filter(group=>group[1]).length,query?1:0);
+  if(query)assert.equal(groups.find(group=>group[1])[2],query.includes('online')?'查找与整理':'阅读与核对');
+ }
+});
 test('workspace pages show only their own cards and the required paper controls',()=>{
  const base=load();
  const tools=base.api.tools.filter(t=>t.kind==='workspace');
@@ -53,4 +64,19 @@ test('workspace pages show only their own cards and the required paper controls'
 });
 test('legacy URLs remain unfocused instead of hiding their original controls',()=>{
  const h=load('?tab=discovery');assert.equal(h.api.applyWorkspace(),false);
+});
+
+test('sidebar can collapse and expand, restores the preference, and works when storage is unavailable',()=>{
+ const code=source.slice(source.indexOf('  function initSidebar()'),source.indexOf('  function navigation()'))+'\ninitSidebar';
+ for(const blocked of [false,true]){
+  const classes=new Set(),attributes={},saved={};
+  const button={setAttribute:(key,value)=>{attributes[key]=value;}};
+  const storage={getItem(){if(blocked)throw Error('blocked');return 'true';},setItem(key,value){if(blocked)throw Error('blocked');saved[key]=value;}};
+  const init=vm.runInNewContext(code,{document:{querySelector:()=>button,body:{classList:{toggle:(name,on)=>on?classes.add(name):classes.delete(name),contains:name=>classes.has(name)}}},localStorage:storage});
+  init();
+  assert.equal(classes.has('sidebar-is-collapsed'),!blocked);
+  button.onclick();assert.equal(attributes['aria-expanded'],blocked?'false':'true');
+  button.onclick();assert.equal(attributes['aria-label'],blocked?'收起侧边栏':'展开侧边栏');
+  if(!blocked)assert.equal(saved['tracescholar-sidebar-collapsed'],'true');
+ }
 });
