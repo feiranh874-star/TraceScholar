@@ -11,9 +11,9 @@ class Element {
   setAttribute(key, value) { this.attrs[key] = value; }
   replaceChildren(...nodes) { this.children = nodes; }
 }
-function harness(replies = {}) {
+function harness(replies = {}, katex) {
   const calls = [];
-  const context = {window:{}, document:{createElement:tag => new Element(tag)}, addEventListener(){},
+  const context = {window:{katex}, document:{createElement:tag => new Element(tag)}, addEventListener(){},
     fetch:async (url, options) => { calls.push({url, options}); return {ok:true, json:async () => replies[url]}; },
     setTimeout(){}, clearTimeout(){}, URLSearchParams};
   vm.runInNewContext(source, context);
@@ -30,6 +30,29 @@ test('vision table preserves blanks and merges without interpreting model HTML',
   assert.equal(body.children[1].children.length, 1);
   assert.equal(body.children[1].children[0].textContent, '');
   assert.equal(wrap.tabIndex, 0);
+});
+
+test('display-only group merges do not change raw table rows', () => {
+  const {api} = harness();
+  const item = {rows:[['group','metric'],['(A)','2'],['','3']],merges:[],
+    display_merges:[{row:1,column:0,rowspan:2,colspan:1}]};
+  const before = JSON.stringify(item.rows), wrap = api.table(item);
+  assert.equal(wrap.children[0].children[1].children[0].children[0].rowSpan,2);
+  assert.equal(wrap.children[0].children[1].children[1].children.length,1);
+  assert.equal(JSON.stringify(item.rows),before);
+});
+
+test('formula preview uses bundled KaTeX MathML and blocks untrusted HTML commands', () => {
+  const katex = require('../assets/vendor/katex/katex.min.js');
+  const {api} = harness({},katex);
+  const preview = api.formula(String.raw`\operatorname{Attention}(Q,K,V)=\operatorname{softmax}(\frac{QK^T}{\sqrt{d_k}})V`);
+  assert.match(preview.innerHTML, /<math/);
+  assert.match(preview.innerHTML, /<mfrac>/);
+  assert.match(preview.innerHTML, /<msqrt>/);
+  const blocked = api.formula(String.raw`\href{javascript:alert(1)}{click}`);
+  assert.doesNotMatch(blocked.innerHTML || '', /href="javascript:/);
+  const malformed = api.formula(String.raw`\frac{broken`);
+  assert.match(malformed.textContent,/暂时无法排版/);
 });
 test('opening vision panel only reads status/cache/jobs and never starts a paid request', async () => {
   const {api, calls} = harness({'/api/vision/status':{configured:false}, '/api/papers/paper/vision/9':{result:null}, '/api/jobs':{items:[]}});

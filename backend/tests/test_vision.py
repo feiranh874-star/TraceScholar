@@ -189,3 +189,23 @@ def test_model_merge_conflict_keeps_every_raw_cell_and_warns():
     data['tables'][0]['rows'][1].pop()
     response['output'][0]['content'][0]['text'] = json.dumps(data)
     with pytest.raises(RuntimeError, match='结构不合法'): vision.parse_response(response)
+
+
+def test_old_cached_results_get_display_fixes_without_network_or_rewriting_cache(client, monkeypatch):
+    pid = upload(client)
+    monkeypatch.setattr(vision, 'recognize', lambda *a:(record(), {}))
+    assert wait(client, client.post(f'/api/papers/{pid}/vision/1', json={}).json()['id'])['status'] == 'done'
+    path = vision.cache_path(pid, 1)
+    raw = json.loads(path.read_text())
+    raw['tables'][0]['rows'] = [['', 'metric'], ['(A)', '1'], ['', '2'], ['(B)', '3'], ['', '4']]
+    raw['tables'][0]['merges'] = []
+    path.write_text(json.dumps(raw))
+    before = path.read_bytes()
+    def no_network(*args): pytest.fail('Reading old cache must never call the model')
+    monkeypatch.setattr(vision, 'recognize', no_network)
+    result = client.get(f'/api/papers/{pid}/vision/1').json()['result']
+    assert result['tables'][0]['rows'] == raw['tables'][0]['rows']
+    assert len(result['tables'][0]['display_merges']) == 2
+    assert result['layout_version'] == 1
+    assert client.post(f'/api/papers/{pid}/vision/1', json={}).json()['cached']
+    assert path.read_bytes() == before

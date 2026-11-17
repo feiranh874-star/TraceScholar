@@ -15,7 +15,7 @@
     const wrap = node('div', undefined, 'vision-table-scroll');
     wrap.tabIndex = 0; wrap.setAttribute('aria-label', '视觉识别表格，可左右滚动');
     const t = node('table'); const covered = new Set(); const anchors = new Map();
-    for (const m of item.merges || []) {
+    for (const m of item.display_merges || item.merges || []) {
       anchors.set(m.row + ':' + m.column, m);
       for (let r = m.row; r < m.row + m.rowspan; r++) for (let c = m.column; c < m.column + m.colspan; c++) {
         if (r !== m.row || c !== m.column) covered.add(r + ':' + c);
@@ -40,6 +40,21 @@
     const a = node('a'); a.href = url; a.download = 'vision-page-' + data.page + '.json'; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  function formula(latex) {
+    const preview = node('div', undefined, 'vision-math');
+    try {
+      if (!window.katex) throw new Error('Formula renderer unavailable');
+      // Insert only KaTeX-generated MathML, never model-provided HTML.
+      preview.innerHTML = window.katex.renderToString(latex, {
+        displayMode:true, output:'mathml', throwOnError:true, trust:false,
+        strict:'error', maxExpand:500, maxSize:20
+      });
+    } catch (_) {
+      preview.textContent = '此公式暂时无法排版，请查看原图或复制下方 LaTeX。';
+      preview.className += ' vision-hint';
+    }
+    return preview;
+  }
   function render(data) {
     const result = node('div', undefined, 'vision-result');
     const heading = node('div', undefined, 'vision-actions');
@@ -49,17 +64,22 @@
     for (const warning of data.warnings || []) result.append(node('p', warning, 'vision-warning'));
     for (const [kind, items] of [['table', data.tables], ['formula', data.equations], ['figure', data.figures]]) {
       for (const item of items || []) {
-        const card = node('article', undefined, 'vision-card'); card.append(node('h4', item.label || '原文区域'));
+        const card = node('article', undefined, 'vision-card vision-' + kind); card.append(node('h4', item.label || '原文区域'));
         const b = item.bbox, id = encodeURIComponent(data.paper_id);
         const q = new URLSearchParams({x0:b[0], y0:b[1], x1:b[2], y1:b[3]});
         const a = node('a'); a.href = '/api/papers/' + id + '/crop/' + data.page + '?' + q;
-        a.target = '_blank'; a.rel = 'noopener'; const img = node('img'); img.loading = 'lazy'; img.src = a.href; img.alt = (item.label || '图表') + ' 原版区域（模型定位，需核对）'; a.append(img); card.append(a);
+        a.target = '_blank'; a.rel = 'noopener'; a.className = 'vision-crop-preview'; a.title = '点击放大查看原版截图';
+        const img = node('img'); img.loading = 'lazy'; img.src = a.href; img.alt = (item.label || '图表') + ' 原版区域（自动定位，需核对）'; a.append(img); card.append(a);
+        if (item.layout_method) card.append(node('p', '截图：' + item.layout_method + ' · 点击图片可放大核对。', 'vision-hint'));
         if (kind === 'table') {
           card.append(table(item));
+          if (item.display_note) card.append(node('p', item.display_note, 'vision-hint'));
           const csv = node('a', '下载视觉表格 CSV');
           csv.href = '/api/papers/' + id + '/vision/' + data.page + '/tables/' + encodeURIComponent(item.id) + '.csv'; card.append(csv);
         } else if (kind === 'formula') {
-          card.append(node('p', 'LaTeX 转写代码（请对照原图）', 'vision-hint'), node('pre', item.latex, 'vision-latex'));
+          card.append(node('p', '公式预览（按识别结果排版，请对照原图）', 'vision-hint'), formula(item.latex));
+          const code = node('details', undefined, 'vision-latex-details');
+          code.append(node('summary', '查看 LaTeX 源码'), node('pre', item.latex, 'vision-latex')); card.append(code);
           const copy = node('button', '复制 LaTeX', 'secondary-button'); copy.type = 'button';
           copy.onclick = async () => { try { await navigator.clipboard.writeText(item.latex); copy.textContent = '已复制'; } catch (_) { copy.textContent = '请选中上方代码复制'; } }; card.append(copy);
         } else card.append(node('p', item.description));
@@ -91,7 +111,11 @@
           status.textContent = '视觉识别进行中，可能需要 1–2 分钟。可离开页面，完成后结果自动保存。';
           timer = setTimeout(() => poll(id), 2000); return;
         }
-        if (job.status === 'done') { show(job.result); status.textContent = '识别结果已保存；再次打开不重复调用。'; }
+        if (job.status === 'done') {
+          const cache = await request(base);
+          if (!active()) return;
+          show(cache.result || job.result); status.textContent = '识别结果已保存；再次打开不重复调用。';
+        }
         else status.textContent = job.message || '任务中断，可在研究工作区的后台任务中继续。';
         button.disabled = false;
       } catch (_) {
@@ -120,5 +144,5 @@
     }).catch(error => { if (active()) status.textContent = error.message + ' 请重新打开本页图表。'; });
     addEventListener('pagehide', () => clearTimeout(timer), {once:true});
   }
-  window.TraceVision = {mount, table};
+  window.TraceVision = {mount, table, formula, render};
 })();

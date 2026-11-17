@@ -204,7 +204,15 @@ def cached(paper_id, number):
     metadata = papers._load_paper(uuid.UUID(str(paper_id)))
     papers.get_paper_page(uuid.UUID(str(paper_id)), number)
     record = papers._read_metadata(cache_path(paper_id, number))
-    return record if record and record.get('sha256') == metadata['sha256'] and record.get('prompt_version') == PROMPT_VERSION else None
+    if record and record.get('sha256') == metadata['sha256'] and record.get('prompt_version') == PROMPT_VERSION:
+        return presentation(record)
+    return None
+
+
+def presentation(record):
+    from app.vision_layout import present
+    with fitz.open(papers._papers_dir() / record['paper_id'] / 'source.pdf') as doc:
+        return present(record, doc[record['page'] - 1])
 
 
 def runner(settings):
@@ -233,7 +241,7 @@ def runner(settings):
                     notice='视觉模型转写结果，未自动认定正确。空白未补值；请核对原图，尤其是数字、合并单元格与公式。')
         jobs.atomic(cache_path(paper_id, number), data)
         job.update(progress=1, completed=[number])
-        return data
+        return presentation(data)
     return run
 
 

@@ -2,7 +2,12 @@
 .vision-panel h3{margin:0;font-size:17px}.vision-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:14px 0}.vision-actions h3{flex:1;min-width:200px}
 .vision-hint{font-size:13px;color:#70778c;line-height:1.8}.vision-warning{font-size:13px;line-height:1.8;background:#fff4df;padding:10px;border-radius:6px}
 .vision-card{min-width:0;padding:18px;margin:18px 0;border:1px solid #e1e3ec;border-radius:10px;background:white}.vision-card h4{margin:0 0 14px}.vision-card>p{line-height:1.8;overflow-wrap:anywhere}.vision-card>a{display:block;margin:12px 0}
-.vision-card img{display:block;width:100%;height:auto;max-height:700px;object-fit:contain;background:#f5f6fa}
+.vision-card .vision-crop-preview{max-height:520px;overflow:auto;padding:12px;border:1px solid #ececf3;border-radius:8px;background:#f8f9fc}
+.vision-card img{display:block;width:auto;max-width:100%;height:auto;margin:auto;background:white}
 .vision-table-scroll{max-width:100%;overflow-x:auto;margin:18px 0;overscroll-behavior-x:contain}.vision-table-scroll table{width:max-content;min-width:100%;border-collapse:collapse;font-size:13px}.vision-table-scroll th,.vision-table-scroll td{border:1px solid #e1e3ec;padding:10px 14px;white-space:pre-wrap;min-width:65px;max-width:350px;vertical-align:middle;line-height:1.7;overflow-wrap:normal;word-break:normal}.vision-table-scroll th{background:#f1effb}.vision-table-scroll td:empty{background:#fbfbfd}
 .vision-latex{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px;background:#f6f5fb;border-radius:8px;font-size:13px;line-height:1.8}
+.vision-math{padding:22px 16px;margin:12px 0 18px;overflow-x:auto;border:1px solid #e8e5f3;border-radius:8px;background:#faf9ff;font-size:20px;text-align:center}
+.vision-math math{font-family:math;font-size:1.1em}.vision-math .katex-error{font-size:14px}
+.vision-latex-details{margin:14px 0;font-size:13px;color:#626b83}.vision-latex-details summary{cursor:pointer;padding:8px 0}
+.vision-formula .vision-crop-preview{max-height:200px}
 @media(max-width:640px){.vision-panel{padding:14px}.vision-card{padding:12px}}
