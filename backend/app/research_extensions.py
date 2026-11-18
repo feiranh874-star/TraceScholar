@@ -10,6 +10,7 @@ from app.retrieval import search_evidence, tokenize
 from app.models import RetrievalEvidenceRecord, SourceReference
 from app.research import _answer_with_evidence
 from app.document_analysis import references, source
+from app.reference_hints import lookup_hints
 
 router=APIRouter(prefix='/api/library',tags=['research-extensions'])
 
@@ -76,7 +77,7 @@ def reference_context(paper_id:uuid.UUID):
 
             for m in re.finditer(r'\['+re.escape(entry['label'])+r'\]',text):
                 contexts.append({'text':text[max(0,m.start()-180):m.end()+220],'page':page['page']})
-        entry.update(contexts=contexts[:8],mention_count=len(contexts),assessment='正文引用上下文已找到' if contexts else '未匹配到独立编号引用，可能是合并引用或抽取遗漏')
+        entry.update(lookup=lookup_hints(entry['text']),contexts=contexts[:8],mention_count=len(contexts),assessment='正文引用上下文已找到' if contexts else '未匹配到独立编号引用，可能是合并引用或抽取遗漏')
     last_ref=max((r['page'] for r in items),default=metadata['page_count'])
     appendices=[{'page':p['page'],'title':next(iter(p.get('text','').splitlines()),'附录候选')[:150],
                  'text':p.get('text','')[:700],'source':source(metadata,p['page'])}

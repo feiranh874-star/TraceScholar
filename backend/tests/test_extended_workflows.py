@@ -279,3 +279,15 @@ def test_batch_translation_range_and_all_selected_papers_locked(client,monkeypat
     for pid in [a,b]:
         assert not client.get(f'/api/papers/{pid}/translations/en?page=1').json()['translation']
         assert client.get(f'/api/papers/{pid}/translations/en?page=2').json()['translation']
+
+
+def test_reference_context_exposes_offline_lookup_hints_and_preserves_original_sources(client):
+    pid=upload(client,'1 Introduction\nA verified scientific claim is discussed in [1].\nReferences\n[1] A. Author. A controlled reference example.\nIEEE, doi:10.1109/TEST.123. 2020.')['paper_id']
+    r=client.get('/api/library/reference-context/'+pid)
+    assert r.status_code==200,r.text
+    item=r.json()['items'][0]
+    assert 'IEEE' in item['text'] and item['page']==1
+    assert item['contexts'][0]['page']==1
+    assert item['lookup']['title']=='A controlled reference example'
+    assert any('IEEE Xplore' in place for place in item['lookup']['suggested_places'])
+    assert item['source']['paper_id']==pid
