@@ -3,7 +3,7 @@
   const el = id => document.getElementById(id);
   const paperId = location.pathname.split('/').filter(Boolean)[1];
   const params = new URLSearchParams(location.search);
-  const state = {paper:null,page:1,request:0,poll:null,fit:false,zoom:100,text:'',translating:false,ocrPage:null};
+  const state = {paper:null,page:1,request:0,poll:null,fit:false,zoom:100,text:'',translating:false,ocrPage:null,translationVersion:0,translationMode:'page',translationJob:null,translationPoll:null};
 
   async function request(url, options) {
     const controller = new AbortController();
@@ -63,18 +63,21 @@
     el('pageText').classList.toggle('is-empty',!state.text.trim());
     el('textOrigin').textContent=data.text_origin==='ocr'?'OCR 识别':state.text.trim()?'PDF 文字':'待识别';
     el('translateButton').disabled=!state.text.trim()||state.translating;
+    el('translatePageButton').disabled=!state.text.trim()||Boolean(state.translationJob&&['running','queued'].includes(state.translationJob.status));
   }
   async function loadPage(number) {
     if(!state.paper)return;
     const page=Math.min(state.paper.page_count,Math.max(1,Math.trunc(Number(number))||1)), requestId=++state.request;
-    state.page=page;state.ocrPage=null;state.text='';
+    state.page=page;state.ocrPage=null;state.text='';state.translationVersion++;state.translationMode='page';
     el('pageNumber').value=page;el('prevPage').disabled=page===1;el('nextPage').disabled=page===state.paper.page_count;
     el('readerPageLabel').textContent='原版页面 · 第 '+page+' 页';
-    el('translationSource').value='';el('translationResult').textContent='';el('pageText').textContent='正在读取本页文字…';el('translateButton').disabled=true;
+    el('translationSource').value='';el('translationResult').textContent='正在读取已保存译文…';el('translatePageButton').disabled=true;
+    el('translationPageHint').textContent='第 '+page+' 页 / 共 '+state.paper.page_count+' 页（可阅读 1–'+state.paper.page_count+' 页）';
+    el('batchTranslateLink').href='/workspace?tool=translation&tab=translation&paper='+paperId+'&page='+page;el('pageText').textContent='正在读取本页文字…';el('translateButton').disabled=true;
     el('originalPdfImage').hidden=true;el('imageStatus').hidden=false;el('imageStatus').textContent='正在加载原版页面…';
     el('originalPdfImage').src='/api/papers/'+paperId+'/render/'+page;
     const url=new URL(location.href);url.searchParams.set('page',page);history.replaceState(null,'',url);
-    try{await refreshText(page);}catch(error){if(requestId===state.request)el('pageText').textContent=error.message;}
+    try{await refreshText(page);if(requestId===state.request){el('translationSource').value=state.text;await refreshSavedTranslation();}}catch(error){if(requestId===state.request)el('pageText').textContent=error.message;}
   }
   function renderOcr(job) {
     const remaining=job.remaining_pages||[], active=job.status==='running';
@@ -111,15 +114,57 @@
     try{await request('/api/papers/'+paperId+'/ocr',{method:'POST'});await pollOcr();}
     catch(error){el('ocrStatus').textContent=error.message;el('ocrButton').disabled=false;}
   }
+  async function refreshSavedTranslation() {
+    const page=state.page,target=el('translationTarget').value,version=++state.translationVersion;
+    try {
+      const result=await request('/api/papers/'+paperId+'/translations/'+target+'?page='+page);
+      if(version!==state.translationVersion)return;
+      el('translationResult').textContent=result.translation||result.notice||'本页尚未翻译，可点击“翻译当前整页并保存”。';
+    } catch(error){if(version===state.translationVersion)el('translationResult').textContent=error.message;}
+  }
   async function translateParagraph() {
     if(state.translating)return;
-    const selection=getSelection(), selected=selection&&el('pageText').contains(selection.anchorNode)?selection.toString().trim():'';
-    const text=selected||el('translationSource').value.trim(),page=state.page;
+    const selection=getSelection(),selected=selection&&el('pageText').contains(selection.anchorNode)&&el('pageText').contains(selection.focusNode)?selection.toString().trim():'';
+    const text=selected||el('translationSource').value.trim(),page=state.page,target=el('translationTarget').value;
     if(!text){el('translationResult').textContent='请先选中或粘贴本页连续原文。';return;}
-    el('translationSource').value=text;el('translateButton').disabled=true;state.translating=true;el('translationResult').textContent='正在翻译…';
-    try{const result=await request('/api/papers/'+paperId+'/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page,text,target:el('translationTarget').value})});if(state.page===page)el('translationResult').textContent=result.translation;}
-    catch(error){if(state.page===page)el('translationResult').textContent=error.message;}
+    if(text.length>8000){el('translationResult').textContent='段落最多 8000 字符，请缩短选文，或使用“翻译当前整页并保存”。';return;}
+    const version=++state.translationVersion;state.translationMode='paragraph';
+    el('translationSource').value=text;el('translateButton').disabled=true;state.translating=true;el('translationResult').textContent='正在翻译段落…';
+    try{const result=await request('/api/papers/'+paperId+'/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page,text,target})});if(version===state.translationVersion)el('translationResult').textContent=result.translation;}
+    catch(error){if(version===state.translationVersion)el('translationResult').textContent=error.message;}
     finally{state.translating=false;el('translateButton').disabled=!state.text.trim();}
+  }
+  function renderTranslationJob(job) {
+    const running=['queued','running'].includes(job.status),number=job.payload.start;
+    el('pageTranslationStatus').textContent='第 '+number+' 页'+(job.payload.target==='zh'?'中文':'英文')+'翻译 · '+({queued:'等待处理',running:'正在处理，您可继续阅读',done:'译文已保存',failed:'未完成',interrupted:'已中断'}[job.status]||job.status)+(job.message?' · '+job.message:'');
+    el('resumePageTranslation').hidden=!['failed','interrupted'].includes(job.status);
+    el('translatePageButton').disabled=running||!state.text.trim();
+  }
+  async function pollTranslationJob() {
+    clearTimeout(state.translationPoll);if(!state.translationJob)return;
+    const id=state.translationJob.id;
+    try {
+      const job=await request('/api/jobs/'+id);if(state.translationJob?.id!==id)return;
+      state.translationJob=job;renderTranslationJob(job);
+      if(['running','queued'].includes(job.status))state.translationPoll=setTimeout(pollTranslationJob,2000);
+      else if(job.status==='done'&&state.page===job.payload.start&&el('translationTarget').value===job.payload.target&&state.translationMode==='page')await refreshSavedTranslation();
+    } catch(error) {
+      el('pageTranslationStatus').textContent='暂时无法读取翻译进度：'+error.message+'；正在重新连接。';
+      state.translationPoll=setTimeout(pollTranslationJob,5000);
+    }
+  }
+  async function translateCurrentPage(resume=false) {
+    const button=el(resume?'resumePageTranslation':'translatePageButton');button.disabled=true;
+    el('pageTranslationStatus').textContent='正在启动翻译任务…';
+    try {
+      const page=state.page,target=el('translationTarget').value;
+      const url=resume?'/api/jobs/'+state.translationJob.id+'/resume':'/api/papers/'+paperId+'/translate-document';
+      const job=await request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resume?{}:{target,start:page,end:page})});
+      state.translationJob=job;
+      if(state.page===job.payload.start&&el('translationTarget').value===job.payload.target){state.translationMode='page';state.translationVersion++;el('translationSource').value=state.text;el('translationResult').textContent='翻译完成后会自动显示在这里。';}
+      renderTranslationJob(job);await pollTranslationJob();
+    } catch(error){el('pageTranslationStatus').textContent=error.message;el('translatePageButton').disabled=!state.text.trim();}
+    finally{button.disabled=resume?false:Boolean(state.translationJob&&['running','queued'].includes(state.translationJob.status))||!state.text.trim();}
   }
   async function initialize() {
     const labels={overview:'工作台',library:'论文库',research:'证据检索',tools:'研究工具',import:'导入页面'};
@@ -143,10 +188,19 @@
       catch(error){el('authorRefreshStatus').textContent=error.message;}
       finally{el('refreshAuthors').disabled=false;}
     });
-    el('pageText').addEventListener('mouseup',()=>{const selection=getSelection();if(selection?.toString().trim())el('translationSource').value=selection.toString().trim();});
-    addEventListener('pagehide',()=>clearTimeout(state.poll));
-    addEventListener('pageshow',event=>{if(event.persisted)pollOcr();});
-    try{await refreshPaper();await loadPage(params.get('page')||1);await pollOcr();}
+    el('pageText').addEventListener('mouseup',()=>{const selection=getSelection();if(selection?.toString().trim()&&el('pageText').contains(selection.anchorNode)&&el('pageText').contains(selection.focusNode)){state.translationVersion++;state.translationMode='paragraph';el('translationSource').value=selection.toString().trim();el('translationResult').textContent='原文已选中，点击“翻译段落”。';}});
+    el('translationSource').addEventListener('input',()=>{state.translationVersion++;state.translationMode='paragraph';el('translationResult').textContent='原文已修改，点击“翻译段落”。';});
+    el('translationTarget').addEventListener('change',()=>{state.translationMode='page';el('translationSource').value=state.text;refreshSavedTranslation();});
+    el('readerBilingualToggle').onclick=()=>{el('bilingualPanel').scrollIntoView({behavior:'smooth',block:'start'});};
+    el('returnToReader').onclick=()=>{el('readerCanvas').scrollIntoView({behavior:'smooth',block:'center'});};
+    el('translatePageButton').onclick=()=>translateCurrentPage();
+    el('resumePageTranslation').onclick=()=>translateCurrentPage(true);
+    addEventListener('pagehide',()=>{clearTimeout(state.poll);clearTimeout(state.translationPoll);});
+    addEventListener('pageshow',event=>{if(event.persisted){pollOcr();if(state.translationJob)pollTranslationJob();}});
+    try{await refreshPaper();await loadPage(params.get('page')||1);await pollOcr();
+      try {const tasks=await request('/api/jobs');state.translationJob=tasks.items.find(j=>j.kind==='translate'&&j.paper_ids.includes(paperId)&&j.payload.start===j.payload.end&&(['queued','running'].includes(j.status)||(['failed','interrupted'].includes(j.status)&&j.payload.start===state.page)));
+        if(state.translationJob){renderTranslationJob(state.translationJob);if(['queued','running'].includes(state.translationJob.status))pollTranslationJob();}
+      } catch {}}
     catch(error){el('readerError').textContent='论文读取未完成：'+error.message;el('readerError').classList.remove('is-hidden');el('readerTitle').textContent='暂时无法打开论文';}
   }
   initialize();

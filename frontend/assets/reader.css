@@ -104,3 +104,17 @@
 @media(max-width:640px) { .reader-figures { padding:18px; } .reader-figure-card { padding:14px; } .reader-fit-tools { flex-wrap:wrap; } }
 
 .reader-fit-button[aria-pressed="true"] { background: var(--primary-pale); border-color: var(--primary); }
+
+/* One translation area below the reader; both columns stay inside the frame. */
+.reader-info.reader-translation { margin-top:0; padding:24px; scroll-margin-top:20px; }
+.reader-translation-heading h2 { margin:0; font-size:18px; }
+.reader-translation-heading .reader-hint { margin:0; flex:1; }
+.reader-translation-actions { align-items:end; flex-wrap:wrap; margin:18px 0; }
+.reader-translation-actions .reader-field { flex:0 1 180px; }
+.reader-translation-actions a { padding:10px 0; color:var(--primary-strong); font-size:12px; }
+.reader-bilingual > * { min-width:0; }
+.reader-bilingual textarea, .reader-bilingual .reader-translation-result { min-height:280px; max-height:520px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface-soft); overflow:auto; font-size:13px; line-height:1.85; box-sizing:border-box; }
+.reader-bilingual .reader-field { align-content:start; }
+.reader-bilingual textarea { width:100%; resize:vertical; }
+#resumePageTranslation { margin:0 0 16px; padding:9px 12px; border-radius:7px; background:var(--primary-pale); color:var(--primary-strong); }
+@media(max-width:600px) { .reader-info.reader-translation { padding:18px; } .reader-translation-actions .reader-field { flex:1 1 100%; } }

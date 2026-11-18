@@ -61,3 +61,5 @@ a.external-paper-button:hover { background:#e1dafa;border-color:#b9a9ef;color:#4
   .has-tool-sidebar .workspace-header,.has-tool-sidebar .workspace-main { margin-left:0; }
 }
 @media(max-width:600px) { .tool-catalog-grid { grid-template-columns:minmax(0,1fr); }.is-focused-tool .tool-panel { padding:20px; }.has-tool-sidebar .tools-navigation nav { grid-template-columns:minmax(0,1fr); } }
+
+.tools-nav-group-links>.tools-nav-current { display:flex;gap:8px;padding:9px 12px;margin:2px 0;border-radius:8px;font-size:12px;line-height:1.6;background:rgb(125 118 255 / 18%);color:white;box-shadow:inset 3px 0 #9690ff; }

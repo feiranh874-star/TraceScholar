@@ -8,7 +8,7 @@
     {id:'layout', name:'图表与公式识别', group:'阅读与核对', kind:'workspace', panel:'layout', control:'analyzePage', selection:'page', description:'选择论文和原始页码，对照原图查看表格、图片和公式。'},
     {id:'references', name:'参考文献', group:'阅读与核对', kind:'workspace', panel:'layout', control:'loadReferences', selection:'single', description:'查看目标论文的真实参考文献条目与正文引用上下文。'},
     {id:'versions', name:'论文版本比较', group:'阅读与核对', kind:'workspace', panel:'versions', control:'compareVersions', selection:'none', description:'选择同一论文的两个版本，查看正文变化和来源页码。'},
-    {id:'translation', name:'全文翻译', group:'阅读与核对', kind:'workspace', panel:'translation', control:'translateDocument', selection:'page', description:'选择论文和翻译页范围，查看或下载保存的双语内容。'},
+    {id:'translation', name:'批量翻译', group:'阅读与核对', kind:'workspace', panel:'translation', control:'translateDocument', selection:'multi', description:'勾选多篇论文，核对各自总页数后，批量翻译指定页面或全文。'},
     {id:'graph', name:'引用图谱', group:'研究与写作', kind:'home', control:'buildGraph', selection:'multi', description:'勾选论文，查看资料库中的真实引用关系。'},
     {id:'outline', name:'研究提纲与初稿', group:'研究与写作', kind:'home', control:'planOutline', selection:'multi', description:'选择最多 8 篇论文，填写研究想法，整理有来源的提纲和初稿。'},
     {id:'agent', name:'分步研究助手', group:'研究与写作', kind:'workspace', panel:'agent', control:'runAgent', extra:['loadRuns'], selection:'multi', description:'勾选论文并提出问题，让助手分步查资料，查看执行记录与来源。'},
@@ -23,7 +23,7 @@
   ];
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const href = tool => tool.kind === 'home' ? '/?view=tools&tool='+tool.id : '/workspace?tab='+tool.panel+'&tool='+tool.id;
-  function current() { return tools.find(t => t.id === new URLSearchParams(location.search).get('tool')); }
+  function current() { const q=new URLSearchParams(location.search);return tools.find(t => t.id === (q.get('tool')|| (q.get('tab')==='translation'?'translation':null))); }
   function initSidebar() {
     const button=document.querySelector('[data-sidebar-collapse]');
     if(!button)return;
@@ -44,7 +44,7 @@
   function navigation() {
     const selected = current();
     const groups = [...new Set(tools.map(t => t.group))];
-    return '<details class="tools-navigation" open><summary><span aria-hidden="true">◇</span>研究工具<span class="tools-nav-chevron" aria-hidden="true">⌄</span></summary><nav aria-label="研究工具"><a class="tools-catalog-link" href="/?view=tools" target="_blank" rel="noopener">全部工具 <span aria-hidden="true">↗</span></a>'+groups.map(group=>'<details class="tools-nav-group"'+(selected?.group===group?' open':'')+'><summary>'+group+'<span aria-hidden="true">⌄</span></summary><div class="tools-nav-group-links">'+tools.filter(t=>t.group===group).map(t=>'<a href="'+href(t)+'" target="_blank" rel="noopener"'+(selected?.id===t.id?' aria-current="page"':'')+'>'+t.name+'<span aria-hidden="true">↗</span></a>').join('')+'</div></details>').join('')+'</nav></details>';
+    return '<details class="tools-navigation" open><summary><span aria-hidden="true">◇</span>研究工具<span class="tools-nav-chevron" aria-hidden="true">⌄</span></summary><nav aria-label="研究工具"><a class="tools-catalog-link" href="/?view=tools" target="_blank" rel="noopener">全部工具 <span aria-hidden="true">↗</span></a>'+groups.map(group=>'<details class="tools-nav-group"'+(selected?.group===group?' open':'')+'><summary>'+group+'<span aria-hidden="true">⌄</span></summary><div class="tools-nav-group-links">'+tools.filter(t=>t.group===group).map(t=>selected?.id===t.id?'<span class="tools-nav-current" aria-current="page">'+t.name+'</span>':'<a href="'+href(t)+'" target="_blank" rel="noopener">'+t.name+'<span aria-hidden="true">↗</span></a>').join('')+'</div></details>').join('')+'</nav></details>';
   }
   function mount() {
     document.querySelectorAll('[data-tools-navigation]').forEach(host => {

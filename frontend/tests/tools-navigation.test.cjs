@@ -24,14 +24,14 @@ test('all tools have unique independently addressable pages and real controls',(
   if(tool.kind==='workspace')assert.ok(html.includes('data-panel="'+tool.panel+'"'));
  }
 });
-test('every sidebar tool opens a separate tab with its own link',()=>{
+test('other tools open separately and the current tool does not link back to itself',()=>{
  const h=load('?tool=online');const host=cell();
  h.document.querySelectorAll=selector=>selector==='[data-tools-navigation]'?[host]:[];
  h.api.mount();
- assert.equal((host.innerHTML.match(/target="_blank"/g)||[]).length,20);
+ assert.equal((host.innerHTML.match(/target="_blank"/g)||[]).length,19);
  assert.ok(host.innerHTML.includes('rel="noopener"'));
  assert.ok(host.innerHTML.includes('<details'));
- assert.ok(host.innerHTML.includes('aria-current="page"'));
+ assert.ok(host.innerHTML.includes('<span class="tools-nav-current" aria-current="page">在线找论文</span>'));
 });
 test('tool groups are independently collapsible and only the current group opens initially',()=>{
  for(const query of ['', '?tool=online', '?tool=references']){
@@ -79,4 +79,11 @@ test('sidebar can collapse and expand, restores the preference, and works when s
   button.onclick();assert.equal(attributes['aria-label'],blocked?'收起侧边栏':'展开侧边栏');
   if(!blocked)assert.equal(saved['tracescholar-sidebar-collapsed'],'true');
  }
+});
+
+test('old translation URLs resolve to the dedicated multiple-paper batch tool',()=>{
+ const h=load('?tab=translation&paper=sample&page=3');
+ assert.equal(h.api.current().id,'translation');
+ assert.equal(h.api.current().name,'批量翻译');
+ assert.equal(h.api.current().selection,'multi');
 });

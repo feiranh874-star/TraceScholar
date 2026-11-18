@@ -200,3 +200,82 @@ def test_agent_comparison_needs_each_selected_paper(client,monkeypatch):
     monkeypatch.setattr(research,'generate_grounded_answer',forbidden)
     d=client.post('/api/research/run',json={'paper_ids':[a['paper_id'],b['paper_id']],'question':'比较这两篇研究的结果','max_steps':1}).json()
     assert d['answer']['insufficient'] and d['answer']['answer'] is None
+
+
+def upload_pages(c, count, label):
+    doc=pymupdf.open()
+    for number in range(1,count+1):
+        page=doc.new_page();page.insert_text((40,50),f'{label} page {number}. Verified academic research evidence and evaluation results.',fontsize=11)
+    data=doc.tobytes();doc.close()
+    r=c.post('/api/papers',files={'file':(label+'.pdf',data,'application/pdf')},data={'conflict_action':'keep_both'})
+    assert r.status_code==201,r.text
+    return r.json()['paper_id']
+
+
+def test_translation_ranges_explain_total_and_validate_before_start(client,monkeypatch):
+    a=upload_pages(client,2,'Alpha');b=upload_pages(client,3,'Beta')
+    monkeypatch.setattr(document_ops,'complete_messages',lambda *a,**k:pytest.fail('Invalid range must not call a model'))
+    r=client.post(f'/api/papers/{a}/translate-document',json={'start':1,'end':20})
+    assert r.status_code==422 and '共 2 页' in r.json()['detail'] and '1–2' in r.json()['detail']
+    for payload in [dict(mode='range',start=1,end=3),dict(mode='range',start=2,end=1),dict(mode='range',start=1)]:
+        r=client.post('/api/library/translate-batch',json={'paper_ids':[b,a],**payload})
+        assert r.status_code==422 and '共 ' in r.json()['detail'],r.text
+    assert client.get('/api/jobs').json()['items']==[]
+    assert client.post('/api/library/translate-batch',json={'paper_ids':[a,a]}).status_code==422
+    assert client.post('/api/library/translate-batch',json={'paper_ids':[]}).status_code==422
+
+
+def test_batch_translation_each_paper_uses_own_page_count_and_cache(client,monkeypatch):
+    a=upload_pages(client,2,'Alpha');b=upload_pages(client,3,'Beta');calls=[]
+    def translated(messages,**kwargs):calls.append(messages[-1]['content']);return '学术译文。'
+    monkeypatch.setattr(document_ops,'complete_messages',translated)
+    for _ in range(2):
+        r=client.post('/api/library/translate-batch',json={'paper_ids':[a,b],'target':'zh','mode':'all'})
+        assert r.status_code==202,r.text
+        job=wait(client,r.json()['id']);assert job['status']=='done',job
+        assert job['total']==job['progress']==5 and len(set(job['completed']))==5
+        assert [(p['start'],p['end']) for p in job['result']['papers']]==[(1,2),(1,3)]
+    assert len(calls)==5
+    assert client.get(f'/api/papers/{a}/translations/zh?page=2').json()['translation']=='学术译文。'
+    assert client.get(f'/api/papers/{b}/translations/zh?page=3').json()['translation']=='学术译文。'
+    assert '## 第 3 页' in client.get(f'/api/papers/{b}/translations/zh/export').text
+
+
+def test_batch_translation_failure_isolated_and_resume_skips_saved_pages(client,monkeypatch):
+    a=upload_pages(client,2,'Alpha');b=upload_pages(client,3,'Beta');calls=[]
+    def partial(messages,**kwargs):
+        source=messages[-1]['content'];calls.append(source)
+        if 'Alpha page 2' in source:raise RuntimeError('Temporary failure')
+        return '已保存译文。'
+    monkeypatch.setattr(document_ops,'complete_messages',partial)
+    r=client.post('/api/library/translate-batch',json={'paper_ids':[a,b]});job=wait(client,r.json()['id'])
+    assert job['status']=='failed' and job['progress']==4
+    assert [p['status'] for p in job['paper_results']]==['failed','done']
+    assert job['paper_results'][0]['failed_page']==2
+    assert client.get(f'/api/papers/{b}/translations/zh?page=3').json()['translation']
+    calls.clear()
+    def recovered(messages,**kwargs):calls.append(messages[-1]['content']);return '恢复后译文。'
+    monkeypatch.setattr(document_ops,'complete_messages',recovered)
+    assert client.post('/api/jobs/'+job['id']+'/resume').status_code==202
+    job=wait(client,job['id']);assert job['status']=='done' and job['progress']==5,job
+    assert len(calls)==1 and 'Alpha page 2' in calls[0]
+    assert all(p['status']=='done' for p in job['result']['papers'])
+
+
+def test_batch_translation_range_and_all_selected_papers_locked(client,monkeypatch):
+    a=upload_pages(client,2,'Alpha');b=upload_pages(client,3,'Beta')
+    entered=threading.Event();release=threading.Event()
+    def translated(*args,**kwargs):entered.set();release.wait(3);return '指定页译文。'
+    monkeypatch.setattr(document_ops,'complete_messages',translated)
+    r=client.post('/api/library/translate-batch',json={'paper_ids':[a,b],'mode':'range','start':2,'end':2,'target':'en'})
+    assert r.status_code==202,r.text
+    try:
+        assert entered.wait(2)
+        assert client.delete('/api/papers/'+b).status_code==409
+        assert client.post(f'/api/papers/{b}/translate-document',json={'target':'en'}).status_code==409
+        assert client.post(f'/api/papers/{b}/ocr').status_code==409
+    finally:release.set()
+    job=wait(client,r.json()['id']);assert job['status']=='done' and job['progress']==2,job
+    for pid in [a,b]:
+        assert not client.get(f'/api/papers/{pid}/translations/en?page=1').json()['translation']
+        assert client.get(f'/api/papers/{pid}/translations/en?page=2').json()['translation']

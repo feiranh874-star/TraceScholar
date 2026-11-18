@@ -53,7 +53,6 @@
     target.replaceChildren(visionHost, output); window.TraceVision.mount(visionHost, paperId, number);
     output.textContent = '正在提取第 ' + number + ' 页图表…'; el('reloadPageFigures').disabled = true;
     el('figuresHeading').textContent = '本页表格与图片 · 第 ' + number + ' 页';
-    el('figuresWorkspace').href = '/workspace?paper=' + paperId + '&page=' + number + '&tab=layout&analyze=1';
     try {
       const response = await fetch('/api/papers/' + paperId + '/analysis/' + number, {cache:'no-store'});
       const data = await response.json();
